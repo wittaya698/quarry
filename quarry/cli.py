@@ -1,0 +1,163 @@
+"""`quarry`: thin command-line wiring over a Site. All rules live in the core."""
+import argparse
+import getpass
+import sys
+
+from quarry.agent import FakeAgent
+from quarry.brief import Brief
+from quarry.identity import Automated, Human
+from quarry.site import Refused, Site
+
+
+def main(argv=None):
+    args = _parser().parse_args(argv)
+    try:
+        args.run(args)
+    except (Refused, FileExistsError, FileNotFoundError) as error:
+        print(f"quarry: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _parser():
+    parser = argparse.ArgumentParser(prog="quarry")
+    commands = parser.add_subparsers(required=True)
+
+    new = commands.add_parser("new", help="create a Site from a Brief")
+    new.add_argument("site")
+    source = new.add_mutually_exclusive_group(required=True)
+    source.add_argument("--brief", help="a Brief JSON file")
+    source.add_argument("--from", dest="from_site", help="copy the Brief of an existing Site")
+    new.set_defaults(run=_new)
+
+    draft = commands.add_parser("draft", help="ask the Agent for a Blockout Draft")
+    draft.add_argument("site")
+    draft.set_defaults(run=_draft)
+
+    status = commands.add_parser("status", help="Checkpoint, Revision and Check results")
+    status.add_argument("site")
+    status.set_defaults(run=_status)
+
+    show = commands.add_parser("show", help="one Revision's choices and Reasons")
+    show.add_argument("site")
+    show.add_argument("revision", type=int)
+    show.set_defaults(run=_show)
+
+    approve = commands.add_parser("approve", help="approve one exact Revision")
+    approve.add_argument("site")
+    approve.add_argument("revision", type=int)
+    approve.add_argument(
+        "--waive", action="append", default=[], metavar="CHECK=WHY",
+        help="accept a missed Check anyway; one per missed Check",
+    )
+    approve.set_defaults(run=_approve)
+
+    reject = commands.add_parser("reject", help="reject a Revision with a note")
+    reject.add_argument("site")
+    reject.add_argument("revision", type=int)
+    reject.add_argument("--note", required=True, help="what was wrong")
+    reject.set_defaults(run=_reject)
+
+    revive = commands.add_parser("revive", help="copy a rejected Revision forward as a new one")
+    revive.add_argument("site")
+    revive.add_argument("revision", type=int)
+    revive.set_defaults(run=_revive)
+
+    return parser
+
+
+def _caller():
+    """The person at the keyboard. Without a terminal there is no person to
+    name, so the core receives an Automated caller and refuses human acts."""
+    if sys.stdin.isatty():
+        return Human(getpass.getuser())
+    return Automated("non-interactive quarry")
+
+
+def _new(args):
+    brief = Brief.load(args.brief) if args.brief else Site.open(args.from_site).brief
+    Site.create(args.site, brief)
+    print(f"created Site {args.site}")
+
+
+def _draft(args):
+    site = Site.open(args.site)
+    site.draft(FakeAgent())
+    print(f"drafted Revision {site.current_revision.number}")
+    _print_checks(site)
+
+
+def _status(args):
+    site = Site.open(args.site)
+    revision = site.current_revision
+    if revision is None:
+        print(f"Checkpoint {site.checkpoint} · no Draft yet (run `quarry draft {args.site}`)")
+        return
+    if site.approval:
+        state = f"approved by {site.approval.by.name}"
+    elif any(r.revision == revision.number for r in site.rejections):
+        state = "rejected"
+    else:
+        state = "awaiting review"
+    print(f"Checkpoint {site.checkpoint} · Revision {revision.number} · {state}")
+    _print_checks(site)
+
+
+def _show(args):
+    site = Site.open(args.site)
+    revision = site.revision(args.revision)
+    for rejection in site.rejections:
+        if rejection.revision == revision.number:
+            print(f"rejected by {rejection.by.name}: {rejection.note}")
+    if revision.revived_from:
+        print(f"revived from Revision {revision.revived_from}")
+    for landmark in revision.blockout.landmarks:
+        x, y = landmark.position
+        print(f"landmark {landmark.waypoint} at ({x:.0f}, {y:.0f}) — {landmark.reason.text}")
+    for path in revision.blockout.paths:
+        print(f"path {path.start}→{path.end} — {path.reason.text}")
+
+
+def _approve(args):
+    site = Site.open(args.site)
+    waivers = dict(_waiver(w) for w in args.waive)
+    site.approve(args.revision, by=_caller(), waivers=waivers)
+    print(f"approved Revision {args.revision}")
+
+
+def _reject(args):
+    site = Site.open(args.site)
+    site.reject(args.revision, by=_caller(), note=args.note)
+    print(f"rejected Revision {args.revision}")
+
+
+def _revive(args):
+    site = Site.open(args.site)
+    site.revive(args.revision)
+    print(f"revived Revision {args.revision} as Revision {site.current_revision.number}")
+
+
+def _waiver(text):
+    check, _, why = text.partition("=")
+    if not why.strip():
+        raise Refused(f"a Waiver needs a reason: --waive '{check}=why it is accepted'")
+    return check.strip(), why.strip()
+
+
+def _print_checks(site):
+    for result in site.checks():
+        waived = site.approval and result.check in site.approval.waivers
+        mark = "pass" if result.passed else "waived" if waived else "MISS"
+        measured, target = _amount(result.measured, result.unit), _amount(result.target, result.unit)
+        print(f"  {mark:6}  {result.check}  {measured} / {target} ±{result.tolerance:.0%}")
+
+
+def _amount(value, unit):
+    if unit == "s":
+        minutes, seconds = divmod(round(value), 60)
+        return f"{minutes}:{seconds:02d}"
+    return f"{value:.0f} m"
+
+
+if __name__ == "__main__":
+    sys.exit(main())
