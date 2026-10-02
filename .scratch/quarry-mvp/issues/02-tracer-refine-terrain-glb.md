@@ -12,13 +12,13 @@ The second half of the skeleton. Once a Blockout is approved, the fake Agent dra
 
 ## Acceptance criteria
 
-- [ ] A Refine Plan can only be drafted on an approved Blockout; anything else is refused
-- [ ] The same Blockout + Refine Plan always builds byte-identical Terrain; all randomness comes from Refine Plan seeds
-- [ ] Terrain names the Blockout Revision and Refine Plan Revision it was built from
-- [ ] Refine Plan Approval and Rejection follow the same Ledger rules as Checkpoint #1
-- [ ] The CLI Export writes a `.glb` only when the Refine Plan is approved; otherwise it is refused
-- [ ] Collision meshes use Godot's `-colonly` naming; a round-trip re-import asserts they exist and match the Terrain's extent
-- [ ] Tests cover determinism, traceability, the Export refusal and the round-trip
+- [x] A Refine Plan can only be drafted on an approved Blockout; anything else is refused
+- [x] The same Blockout + Refine Plan always builds byte-identical Terrain; all randomness comes from Refine Plan seeds
+- [x] Terrain names the Blockout Revision and Refine Plan Revision it was built from
+- [x] Refine Plan Approval and Rejection follow the same Ledger rules as Checkpoint #1
+- [x] The CLI Export writes a `.glb` only when the Refine Plan is approved; otherwise it is refused
+- [x] Collision meshes use Godot's `-colonly` naming; a round-trip re-import asserts they exist and match the Terrain's extent
+- [x] Tests cover determinism, traceability, the Export refusal and the round-trip
 
 ## Blocked by
 

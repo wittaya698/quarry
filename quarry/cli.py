@@ -5,6 +5,7 @@ import sys
 
 from quarry.agent import FakeAgent
 from quarry.brief import Brief
+from quarry.export import ExportError
 from quarry.identity import Automated, Human
 from quarry.site import Refused, Site
 
@@ -13,7 +14,7 @@ def main(argv=None):
     args = _parser().parse_args(argv)
     try:
         args.run(args)
-    except (Refused, FileExistsError, FileNotFoundError) as error:
+    except (Refused, ExportError, FileExistsError, FileNotFoundError) as error:
         print(f"quarry: {error}", file=sys.stderr)
         return 1
     return 0
@@ -34,16 +35,20 @@ def _parser():
     draft.add_argument("site")
     draft.set_defaults(run=_draft)
 
+    refine = commands.add_parser("refine", help="ask the Agent for a Refine Plan Draft")
+    refine.add_argument("site")
+    refine.set_defaults(run=_refine)
+
     status = commands.add_parser("status", help="Checkpoint, Revision and Check results")
     status.add_argument("site")
     status.set_defaults(run=_status)
 
-    show = commands.add_parser("show", help="one Revision's choices and Reasons")
+    show = commands.add_parser("show", help="one Revision's choices and Reasons, at the current Checkpoint")
     show.add_argument("site")
     show.add_argument("revision", type=int)
     show.set_defaults(run=_show)
 
-    approve = commands.add_parser("approve", help="approve one exact Revision")
+    approve = commands.add_parser("approve", help="approve one exact Revision at the current Checkpoint")
     approve.add_argument("site")
     approve.add_argument("revision", type=int)
     approve.add_argument(
@@ -62,6 +67,11 @@ def _parser():
     revive.add_argument("site")
     revive.add_argument("revision", type=int)
     revive.set_defaults(run=_revive)
+
+    export = commands.add_parser("export", help="write the .glb once the Refine Plan is approved")
+    export.add_argument("site")
+    export.add_argument("out", help="the .glb file to write")
+    export.set_defaults(run=_export)
 
     return parser
 
@@ -87,24 +97,45 @@ def _draft(args):
     _print_checks(site)
 
 
+def _refine(args):
+    site = Site.open(args.site)
+    site.draft_refine_plan(FakeAgent())
+    print(f"drafted Refine Plan Revision {site.current_refine_plan.number}")
+
+
 def _status(args):
     site = Site.open(args.site)
     revision = site.current_revision
     if revision is None:
-        print(f"Checkpoint {site.checkpoint} · no Draft yet (run `quarry draft {args.site}`)")
+        print(f"Checkpoint 1 · no Draft yet (run `quarry draft {args.site}`)")
         return
-    if site.approval:
-        state = f"approved by {site.approval.by.name}"
-    elif any(r.revision == revision.number for r in site.rejections):
-        state = "rejected"
-    else:
-        state = "awaiting review"
-    print(f"Checkpoint {site.checkpoint} · Revision {revision.number} · {state}")
+    print(f"Checkpoint 1 · Blockout Revision {revision.number} · {_state(revision, site.approval, site.rejections)}")
     _print_checks(site)
+    if site.checkpoint == 1:
+        return
+    plan = site.current_refine_plan
+    if plan is None:
+        print(f"Checkpoint 2 · no Refine Plan yet (run `quarry refine {args.site}`)")
+        return
+    state = _state(plan, site.refine_plan_approval, site.refine_plan_rejections)
+    print(f"Checkpoint 2 · Refine Plan Revision {plan.number} · {state}")
+    if site.checkpoint == "done":
+        print(f"ready to export (run `quarry export {args.site} {args.site}.glb`)")
+
+
+def _state(revision, approval, rejections):
+    if approval:
+        return f"approved by {approval.by.name}"
+    if any(r.revision == revision.number for r in rejections):
+        return "rejected"
+    return "awaiting review"
 
 
 def _show(args):
     site = Site.open(args.site)
+    if site.checkpoint != 1:
+        _show_refine_plan(site, args.revision)
+        return
     revision = site.revision(args.revision)
     for rejection in site.rejections:
         if rejection.revision == revision.number:
@@ -118,23 +149,61 @@ def _show(args):
         print(f"path {path.start}→{path.end} — {path.reason.text}")
 
 
+def _show_refine_plan(site, number):
+    revision = site.refine_plan(number)
+    for rejection in site.refine_plan_rejections:
+        if rejection.revision == revision.number:
+            print(f"rejected by {rejection.by.name}: {rejection.note}")
+    if revision.revived_from:
+        print(f"revived from Refine Plan Revision {revision.revived_from}")
+    for s in revision.plan.surfaces:
+        print(
+            f"{s.surface}: {s.slope_profile} slopes, falloff {s.falloff_width:g} m, "
+            f"roughness {s.roughness:g} m, seed {s.seed}, vegetation {s.vegetation_density:.0%}"
+            f" — {s.reason.text}"
+        )
+
+
 def _approve(args):
     site = Site.open(args.site)
     waivers = dict(_waiver(w) for w in args.waive)
-    site.approve(args.revision, by=_caller(), waivers=waivers)
-    print(f"approved Revision {args.revision}")
+    if site.checkpoint == 1:
+        site.approve(args.revision, by=_caller(), waivers=waivers)
+        print(f"approved Blockout Revision {args.revision}")
+    else:
+        site.approve_refine_plan(args.revision, by=_caller(), waivers=waivers)
+        print(f"approved Refine Plan Revision {args.revision}")
 
 
 def _reject(args):
     site = Site.open(args.site)
-    site.reject(args.revision, by=_caller(), note=args.note)
-    print(f"rejected Revision {args.revision}")
+    if site.checkpoint == 1:
+        site.reject(args.revision, by=_caller(), note=args.note)
+        print(f"rejected Blockout Revision {args.revision}")
+    else:
+        site.reject_refine_plan(args.revision, by=_caller(), note=args.note)
+        print(f"rejected Refine Plan Revision {args.revision}")
 
 
 def _revive(args):
     site = Site.open(args.site)
-    site.revive(args.revision)
-    print(f"revived Revision {args.revision} as Revision {site.current_revision.number}")
+    if site.checkpoint == 1:
+        site.revive(args.revision)
+        print(f"revived Blockout Revision {args.revision} as Revision {site.current_revision.number}")
+    else:
+        site.revive_refine_plan(args.revision)
+        number = site.current_refine_plan.number
+        print(f"revived Refine Plan Revision {args.revision} as Revision {number}")
+
+
+def _export(args):
+    site = Site.open(args.site)
+    site.export(args.out)
+    terrain = site.terrain()
+    print(
+        f"exported {args.out} from Blockout Revision {terrain.blockout_revision} "
+        f"and Refine Plan Revision {terrain.refine_plan_revision}; collision verified"
+    )
 
 
 def _waiver(text):
