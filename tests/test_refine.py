@@ -4,6 +4,8 @@ import pytest
 
 from quarry.agent import FakeAgent
 from quarry.brief import Brief
+from quarry.checks import run_checks
+from quarry.surface import surface
 from quarry.identity import AGENT, Automated, Human
 from quarry.site import Refused, Site
 
@@ -43,15 +45,16 @@ def test_a_refine_plan_on_an_approved_blockout_refines_every_surface_with_a_reas
 
     revision = approved.current_refine_plan
     assert revision.number == 1
-    [ground] = revision.plan.surfaces
-    assert ground.surface == "ground"
-    assert ground.slope_profile in {"linear", "smooth", "steep"}
-    assert ground.falloff_width >= 0
-    assert ground.roughness >= 0
-    assert isinstance(ground.seed, int)
-    assert 0 <= ground.vegetation_density <= 1
-    assert ground.reason.author == "ai"
-    assert ground.reason.text
+    zones = [z.name for z in approved.current_revision.blockout.zones]
+    assert [s.surface for s in revision.plan.surfaces] == ["ground", *zones]
+    for refinement in revision.plan.surfaces:
+        assert refinement.slope_profile in {"linear", "smooth", "steep"}
+        assert refinement.falloff_width >= 0
+        assert refinement.roughness >= 0
+        assert isinstance(refinement.seed, int)
+        assert 0 <= refinement.vegetation_density <= 1
+        assert refinement.reason.author == "ai"
+        assert refinement.reason.text
 
 
 def test_the_same_blockout_and_refine_plan_always_build_byte_identical_terrain(approved, tmp_path):
@@ -147,3 +150,36 @@ def test_refine_plan_history_survives_reopening_the_site(approved):
     assert reopened.approval == approved.approval
     assert reopened.rejections == []
     assert reopened.checkpoint == "done"
+
+
+def test_the_same_checks_run_on_the_built_terrain(tmp_path):
+    across = {**MEADOW, "mood": "gentle", "walk_targets": [{"from": "spawn", "to": "cave", "time": 100}]}
+    site = Site.create(tmp_path / "across", Brief.from_dict(across))
+    site.draft(FakeAgent())
+    site.approve(1, by=ALICE)
+    site.draft_refine_plan(FakeAgent())
+    blockout = site.current_revision.blockout
+
+    on_blockout = {r.check: r for r in site.checks()}
+    on_terrain = {r.check: r for r in run_checks(site.brief, blockout, site.terrain())}
+
+    assert set(on_terrain) == set(on_blockout)
+    walk = "walk spawn→cave"  # straight across the middle, over the rise
+    assert on_terrain[walk].measured == pytest.approx(on_blockout[walk].measured, rel=0.03)
+
+
+def test_terrain_stands_on_the_blockout_surface_with_each_samples_own_refinement(approved):
+    approved.draft_refine_plan(FakeAgent())
+    [rise] = approved.current_revision.blockout.zones
+    refinements = {s.surface: s for s in approved.current_refine_plan.plan.surfaces}
+
+    terrain = approved.terrain()
+    coarse = surface(approved.current_revision.blockout)
+
+    x, y = rise.center
+    assert terrain.height(x, y) == pytest.approx(coarse.height(x, y), abs=refinements["rise"].roughness)
+    assert coarse.height(x, y) == rise.height > 0
+    column, row = round(x / terrain.spacing), round(y / terrain.spacing)
+    assert terrain.vegetation[row][column] == refinements["rise"].vegetation_density
+    assert terrain.vegetation[0][0] == refinements["ground"].vegetation_density
+    assert refinements["rise"].vegetation_density != refinements["ground"].vegetation_density

@@ -18,14 +18,14 @@ Make the Blockout and its Checks complete, end to end through the fake Agent and
 
 ## Acceptance criteria
 
-- [ ] Overlap fixtures pass for each Combine Mode and for Stacking Order; surface values come from the topmost Zone only
-- [ ] A Path over a known slope gives the expected slope-adjusted walk time, and fails the Max Walkable Slope Check above the limit
-- [ ] Brief Check flags a Walk Target that is too long for the footprint and an undefined Waypoint, and blocks drafting; a hard-but-possible Brief passes
-- [ ] Measurable Readings appear as Checks; unmeasurable ones appear without pass/miss
-- [ ] Each Landmark has a Pad with a flatness Check; AI-chosen Landmarks are flagged; decorative Paths are not measured
-- [ ] A Blockout that misses a target is still produced, with a Reason naming the miss, and the Brief is unchanged
-- [ ] All Checks run identically on any surface, so the same Check code serves Checkpoint #2 later
-- [ ] Tests cover all of the above through public interfaces
+- [x] Overlap fixtures pass for each Combine Mode and for Stacking Order; surface values come from the topmost Zone only
+- [x] A Path over a known slope gives the expected slope-adjusted walk time, and fails the Max Walkable Slope Check above the limit
+- [x] Brief Check flags a Walk Target that is too long for the footprint and an undefined Waypoint, and blocks drafting; a hard-but-possible Brief passes
+- [x] Measurable Readings appear as Checks; unmeasurable ones appear without pass/miss
+- [x] Each Landmark has a Pad with a flatness Check; AI-chosen Landmarks are flagged; decorative Paths are not measured
+- [x] A Blockout that misses a target is still produced, with a Reason naming the miss, and the Brief is unchanged
+- [x] All Checks run identically on any surface, so the same Check code serves Checkpoint #2 later
+- [x] Tests cover all of the above through public interfaces
 
 ## Blocked by
 

@@ -107,6 +107,12 @@ def _status(args):
     site = Site.open(args.site)
     revision = site.current_revision
     if revision is None:
+        problems = site.brief_problems()
+        if problems:
+            print("Checkpoint 1 · the Brief fails the Brief Check, so it cannot be drafted:")
+            for problem in problems:
+                print(f"  {problem}")
+            return
         print(f"Checkpoint 1 · no Draft yet (run `quarry draft {args.site}`)")
         return
     print(f"Checkpoint 1 · Blockout Revision {revision.number} · {_state(revision, site.approval, site.rejections)}")
@@ -142,11 +148,25 @@ def _show(args):
             print(f"rejected by {rejection.by.name}: {rejection.note}")
     if revision.revived_from:
         print(f"revived from Revision {revision.revived_from}")
-    for landmark in revision.blockout.landmarks:
+    blockout = revision.blockout
+    for landmark in blockout.landmarks:
         x, y = landmark.position
-        print(f"landmark {landmark.waypoint} at ({x:.0f}, {y:.0f}) — {landmark.reason.text}")
-    for path in revision.blockout.paths:
-        print(f"path {path.start}→{path.end} — {path.reason.text}")
+        flag = " [AI-chosen]" if landmark.ai_chosen else ""
+        print(
+            f"landmark {landmark.name}{flag} at ({x:.0f}, {y:.0f}), pad {landmark.pad_radius:g} m"
+            f" — {landmark.reason.text}"
+        )
+    for path in blockout.paths:
+        flag = " [decorative]" if path.decorative else ""
+        print(f"path {path.start}→{path.end}{flag} — {path.reason.text}")
+    for order, zone in enumerate(blockout.zones, 1):
+        x, y = zone.center
+        print(
+            f"zone {order} {zone.name}: {zone.profile} {zone.height:+g} m, radius {zone.radius:.0f} m"
+            f" at ({x:.0f}, {y:.0f}), {zone.combine} — {zone.reason.text}"
+        )
+    for reading in blockout.readings:
+        print(f"reading “{reading.phrase}” as {reading.meaning} — {reading.reason.text}")
 
 
 def _show_refine_plan(site, number):
@@ -218,13 +238,19 @@ def _print_checks(site):
         waived = site.approval and result.check in site.approval.waivers
         mark = "pass" if result.passed else "waived" if waived else "MISS"
         measured, target = _amount(result.measured, result.unit), _amount(result.target, result.unit)
-        print(f"  {mark:6}  {result.check}  {measured} / {target} ±{result.tolerance:.0%}")
+        goal = f"≤ {target}" if result.at_most else f"/ {target} ±{result.tolerance:.0%}"
+        print(f"  {mark:6}  {result.check}  {measured} {goal}")
+    for reading in site.current_revision.blockout.readings:
+        if reading.measure is None:
+            print(f"  {'—':6}  reading {reading.phrase}  not measurable: {reading.meaning}")
 
 
 def _amount(value, unit):
     if unit == "s":
         minutes, seconds = divmod(round(value), 60)
         return f"{minutes}:{seconds:02d}"
+    if unit == "°":
+        return f"{value:.1f}°"
     return f"{value:.0f} m"
 
 

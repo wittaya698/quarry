@@ -1,13 +1,21 @@
 """The Agent port, and a fake that drafts without an LLM."""
 import math
 
-from quarry.blockout import Blockout, Landmark, Path, Reason
+from dataclasses import replace
+
+from quarry.blockout import Blockout, Landmark, Path, Reading, Reason, Zone
+from quarry.checks import run_checks
 from quarry.refine import RefinePlan, Refinement
 
 
+# Mood words the fake knows how to measure; any other phrase is read but not measured.
+_MEASURABLE = {"gentle": ("max_slope", 15.0, "no slope steeper than 15°")}
+
+
 class FakeAgent:
-    """Places Waypoints on a ring around the footprint's centre and joins each
-    Walk Target with a straight Path. Deterministic, so tests know the answer."""
+    """Places Waypoints on a ring around the footprint's centre, raises a gentle
+    rise in the middle and joins each Walk Target with a straight Path.
+    Deterministic, so tests know the answer."""
 
     def __init__(self, seed=1):
         self.seed = seed
@@ -29,7 +37,14 @@ class FakeAgent:
             )
             for t in brief.walk_targets
         )
-        return Blockout(tuple(landmarks.values()), paths)
+        # Inside the ring, so it never tilts a Pad; ~13° at its steepest.
+        rise_radius = min(width, depth) / 6
+        rise = Zone(
+            "rise", (width / 2, depth / 2), rise_radius, rise_radius * 0.15, "dome", "add",
+            Reason("ai", "a low rise in the middle gives the ground some shape"),
+        )
+        blockout = Blockout(tuple(landmarks.values()), paths, (rise,), _readings(brief.mood))
+        return _own_misses(brief, blockout)
 
     def draft_refine_plan(self, brief, blockout, rejection_note=None):
         ground = Refinement(
@@ -41,4 +56,46 @@ class FakeAgent:
             vegetation_density=0.3,
             reason=Reason("ai", "low roughness keeps the ground easy to walk"),
         )
-        return RefinePlan((ground,))
+        zones = tuple(
+            Refinement(
+                surface=zone.name,
+                slope_profile="smooth",
+                falloff_width=10.0,
+                roughness=0.2,
+                seed=self.seed,
+                vegetation_density=0.6,
+                reason=Reason("ai", f"denser growth marks {zone.name} out from the ground"),
+            )
+            for zone in blockout.zones
+        )
+        return RefinePlan((ground, *zones))
+
+def _readings(mood):
+    readings = []
+    for phrase in (p.strip() for p in mood.split(",")):
+        if not phrase:
+            continue
+        word = next((w for w in _MEASURABLE if w in phrase.lower()), None)
+        if word:
+            measure, limit, meaning = _MEASURABLE[word]
+            readings.append(Reading(phrase, meaning, measure, limit, Reason("ai", f"“{word}” reads as a slope limit")))
+        else:
+            readings.append(Reading(phrase, "a feel to judge by eye", None, None, Reason("ai", "no measure fits this phrase")))
+    return tuple(readings)
+
+
+def _own_misses(brief, blockout):
+    """A missed target is delivered anyway, with the Path's Reason owning the miss.
+    The Brief is never bent to fit."""
+    missed = {r.check: r for r in run_checks(brief, blockout) if not r.passed}
+    paths = []
+    for path in blockout.paths:
+        miss = missed.get(f"walk {path.start}→{path.end}")
+        if miss:
+            text = (
+                f"{path.reason.text}; it measures {miss.measured:.0f} {miss.unit} "
+                f"and misses the {miss.target:g} {miss.unit} target"
+            )
+            path = replace(path, reason=Reason("ai", text))
+        paths.append(path)
+    return replace(blockout, paths=tuple(paths))

@@ -4,7 +4,7 @@ A terrain-authoring tool for game developers. An AI agent drafts the terrain, an
 
 You write a **Brief**: a footprint, the places you care about, how long it should take to walk between them, and a mood. The AI drafts a coarse **Blockout** with a **Reason** for each choice. Quarry then measures that Blockout against your targets rather than taking the AI's word for it. Nothing moves on until you approve one exact **Revision**.
 
-> **Status: early.** The skeleton runs end to end from the CLI with a fake Agent: Brief → Blockout → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. The Ground is the only surface so far (no Zones yet), there are no Checks on Terrain, and the Export holds only the terrain mesh and its collision. The browser Checkpoint pages and the Claude-backed Agent are planned. See [the roadmap](#roadmap).
+> **Status: early.** The skeleton runs end to end from the CLI with a fake Agent: Brief → Brief Check → Blockout (Zones, Pads, Readings) → all Blockout Checks → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. The Checks can already measure Terrain, but Checkpoint #2 doesn't run them yet, and the Export holds only the terrain mesh and its collision. The browser Checkpoint pages and the Claude-backed Agent are planned. See [the roadmap](#roadmap).
 
 ## Quick start
 
@@ -22,7 +22,16 @@ uv run quarry draft island
 drafted Revision 1
   pass    walk spawn→lighthouse  2:45 / 3:00 ±10%
   MISS    walk spawn→village  231 m / 80 m ±10%
+  pass    slope spawn→lighthouse  0.0° ≤ 30.0°
+  pass    slope spawn→village  0.0° ≤ 30.0°
+  pass    pad spawn  0.0° ≤ 3.0°
+  pass    pad lighthouse  0.0° ≤ 3.0°
+  pass    pad village  0.0° ≤ 3.0°
+  pass    reading gentle hills  13.5° ≤ 15.0°
+  —       reading cozy exploration  not measurable: a feel to judge by eye
 ```
+
+A Brief that's provably impossible, for example a Walk Target naming an undefined Waypoint or one too long to fit in the footprint, fails the **Brief Check**. `status` lists the problems, and `draft` is refused until the Brief is fixed.
 
 Approve the Blockout (waiving the miss), then draft, approve and export the Refine Plan:
 
@@ -68,8 +77,8 @@ exported island.glb from Blockout Revision 1 and Refine Plan Revision 1; collisi
 | `quarry new SITE --from OTHER_SITE`              | Create a variant Site from a copy of another Site's Brief, with its own history |
 | `quarry draft SITE`                              | Ask the Agent for a new Blockout Revision                    |
 | `quarry refine SITE`                             | Ask the Agent for a new Refine Plan Revision (needs an approved Blockout) |
-| `quarry status SITE`                             | Both Checkpoints' state, Revisions and Check results         |
-| `quarry show SITE N`                             | Revision N of the Draft at the current Checkpoint, each choice with its Reason |
+| `quarry status SITE`                             | Both Checkpoints' state, Revisions and Check results, or Brief Check problems before the first Draft |
+| `quarry show SITE N`                             | Revision N of the Draft at the current Checkpoint (Landmarks and Pads, Paths, Zones in Stacking Order, Readings), each choice with its Reason |
 | `quarry approve SITE N [--waive "CHECK=WHY"]...` | Approve Revision N at the current Checkpoint; every missed Check needs a Waiver |
 | `quarry reject SITE N --note TEXT`               | Reject Revision N at the current Checkpoint, saying what was wrong |
 | `quarry revive SITE N`                           | Copy a rejected Revision forward as a new one                |
@@ -79,6 +88,21 @@ exported island.glb from Blockout Revision 1 and Refine Plan Revision 1; collisi
 
 A Site is a directory containing `brief.json` and `history.jsonl`. The history is append-only: entries are added, never edited or deleted.
 
+## Checks
+
+Checks measure a surface: the Blockout's coarse **Surface** at Checkpoint #1, and the same code can measure Terrain.
+
+| Check            | Passes when                                                                   |
+| ---------------- | ----------------------------------------------------------------------------- |
+| `walk A→B`       | The distance along the ground (so a climb counts for more than its map length), or that distance ÷ Walk Speed, is within the target's tolerance |
+| `slope A→B`      | The Path's steepest stretch is no steeper than `max_walkable_slope`           |
+| `pad NAME`       | The Landmark's Pad is no steeper than 3° anywhere                             |
+| `reading PHRASE` | A measurable Reading's limit holds across the footprint (max slope or max height) |
+
+Unmeasurable Readings are listed without a pass or miss. Decorative Paths aren't measured. AI-chosen Landmarks are marked `[AI-chosen]` in `show`, and still stand on a checked Pad.
+
+The Brief Check flags a Walk Target only when no route could meet it: one longer than a 4 m-wide route winding back and forth across the whole footprint at the Max Walkable Slope. A hard but possible target passes, and if the Draft then misses it, the Path's Reason says so. The Brief is never rewritten to fit.
+
 ## Rules the core enforces
 
 - **Approval names one exact Revision.** Approving any Revision other than the current one is refused, and so is approving a rejected one.
@@ -86,6 +110,7 @@ A Site is a directory containing `brief.json` and `history.jsonl`. The history i
 - **Human acts are human-only.** Only a human can approve, waive or reject. The Site refuses these acts from the Agent or from any automated caller, and no setting turns this off. When the CLI is run without a terminal (from a pipe, script or CI), it passes an automated identity, so the act is refused. See [ADR-0004](docs/adr/0004-checkpoint-acts-are-human-only-enforced-in-core.md).
 - **Rejections need a note** and keep the Revision. A rejected Revision stays viewable and can be revived.
 - **Nothing is built on an unapproved Blockout.** A Refine Plan is refused until the Blockout is approved, and the Refine Plan passes its own Checkpoint under the same rules.
+- **One definition of height.** Zones combine in Stacking Order by their Combine Mode (`add`, `max` or `replace`). Each point takes its surface values, such as roughness and vegetation, from its topmost Zone alone, never from a blend. Checks and the Terrain Builder share this one definition.
 - **Terrain is built by code, not the AI.** The same Blockout and Refine Plan always give byte-identical Terrain, whose only randomness is the Refine Plan's seed. Terrain names the Blockout Revision and Refine Plan Revision it came from. See [ADR-0001](docs/adr/0001-approved-blockout-is-the-contract.md).
 - **Export is verified, not trusted.** Export is refused until the Refine Plan is approved. The `.glb` names its collision mesh `terrain-colonly`, so Godot 4 builds a collision body on import. Each Export is re-imported, and its collision is re-measured against the Terrain before the file is kept. See [ADR-0002](docs/adr/0002-standalone-core-browser-checkpoints-glb-export.md).
 
@@ -100,12 +125,13 @@ Tests use only the public interfaces, and they never call a live LLM.
 ```
 quarry/
   site.py       Site: Brief + append-only history; Checkpoint rules for both Drafts
-  checks.py     Checks: measured comparisons against the Brief's targets
+  checks.py     Checks: walk, slope, Pad and Reading Checks, measured on any surface
+  surface.py    Surface: Ground + Zones → height and topmost Zone at any point
   agent.py      Agent port and the deterministic FakeAgent
-  brief.py      Brief and Walk Targets, loaded from JSON
-  blockout.py   Blockout: Landmarks and Paths, each with a Reason
+  brief.py      Brief and Walk Targets, loaded from JSON; the Brief Check
+  blockout.py   Blockout: Landmarks with Pads, Paths, Zones and Readings, each with a Reason
   refine.py     Refine Plan: how each surface looks up close, with a Reason
-  terrain.py    Terrain Builder: Blockout + Refine Plan → height grid
+  terrain.py    Terrain Builder: Surface + Refine Plan → height and vegetation grids
   export.py     .glb writer with Godot collision naming, and its re-import
   identity.py   Human, Automated, and the Agent's identity
   cli.py        Thin CLI wiring over the core
@@ -128,7 +154,7 @@ The MVP is planned as ten vertical slices in [.scratch/quarry-mvp/issues/](.scra
 
 1. ✅ Tracer: Brief → Blockout → Checks → Approve/Reject via CLI
 2. ✅ Tracer: Refine Plan → Terrain → `.glb`
-3. All Blockout Checks: overlapping Zones, slope-aware walking, Brief Check, Readings, Pads
+3. ✅ All Blockout Checks: overlapping Zones, slope-aware walking, Brief Check, Readings, Pads
 4. Checkpoint #1 page: a top-down Blockout view in the browser, with edits and human acts
 5. Checkpoint #2: Checks on Terrain, Waivers per Checkpoint, and a walkable preview
 6. Live Agent: a Claude-backed adapter with a validation layer
