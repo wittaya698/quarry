@@ -2,11 +2,15 @@
 import math
 
 from quarry.blockout import Blockout, Landmark, Path, Reason
+from quarry.refine import RefinePlan, Refinement
 
 
 class FakeAgent:
     """Places Waypoints on a ring around the footprint's centre and joins each
     Walk Target with a straight Path. Deterministic, so tests know the answer."""
+
+    def __init__(self, seed=1):
+        self.seed = seed
 
     def draft_blockout(self, brief, rejection_note=None):
         width, depth = brief.footprint
@@ -26,3 +30,15 @@ class FakeAgent:
             for t in brief.walk_targets
         )
         return Blockout(tuple(landmarks.values()), paths)
+
+    def draft_refine_plan(self, brief, blockout, rejection_note=None):
+        ground = Refinement(
+            surface="ground",
+            slope_profile="smooth",
+            falloff_width=20.0,
+            roughness=0.5,
+            seed=self.seed,
+            vegetation_density=0.3,
+            reason=Reason("ai", "low roughness keeps the ground easy to walk"),
+        )
+        return RefinePlan((ground,))
