@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# Secrets (Claude API key for the Agent adapter)
+.env
+.env.*
+!.env.example
+
+# Browser Checkpoint pages
+node_modules/
+
+# Godot (when importing Exports to verify them)
+.godot/
+*.import
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
