@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from quarry.blockout import Blockout
-from quarry.brief import Brief
+from quarry.brief import Brief, brief_check
 from quarry.checks import run_checks
 from quarry.export import export_glb, verify_export
 from quarry.identity import Human
@@ -142,7 +142,14 @@ class Site:
 
     # --- Checkpoint #1: the Blockout --------------------------------------
 
+    def brief_problems(self):
+        """The Brief Check: what makes this Brief impossible. Empty means it can be drafted."""
+        return brief_check(self.brief)
+
     def draft(self, agent):
+        problems = self.brief_problems()
+        if problems:
+            raise Refused(f"the Brief fails the Brief Check: {'; '.join(problems)}")
         self._append(self._blockout, agent.draft_blockout(self.brief))
 
     def revive(self, number):

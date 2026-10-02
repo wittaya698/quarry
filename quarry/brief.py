@@ -1,7 +1,10 @@
 """The Brief: what the user asked for, read from a JSON file."""
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
+
+CORRIDOR = 4.0  # metres; the narrowest strip a Path can wind along
 
 
 @dataclass(frozen=True)
@@ -56,3 +59,24 @@ class Brief:
             walk_speed=data.get("walk_speed", 1.4),
             max_walkable_slope=data.get("max_walkable_slope", 30.0),
         )
+
+
+def brief_check(brief):
+    """The Brief Check: only what is provably impossible, as one problem each.
+    A hard Brief passes; only an impossible one blocks drafting."""
+    problems = []
+    for t in brief.walk_targets:
+        for name in (t.start, t.end):
+            if name not in brief.waypoints:
+                problems.append(f"walk {t.start}→{t.end} names {name}, which is not a Waypoint")
+    width, depth = brief.footprint
+    longest = width * depth / CORRIDOR / math.cos(math.radians(brief.max_walkable_slope))
+    for t in brief.walk_targets:
+        goal = t.time * brief.walk_speed if t.time is not None else t.distance
+        shortest_accepted = goal * (1 - t.tolerance)
+        if shortest_accepted > longest:
+            problems.append(
+                f"walk {t.start}→{t.end} needs at least {shortest_accepted:.0f} m, but the "
+                f"{width:g} × {depth:g} m footprint holds no route longer than {longest:.0f} m"
+            )
+    return problems

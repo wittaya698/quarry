@@ -41,7 +41,7 @@ def test_drafting_places_every_waypoint_and_draws_a_path_per_walk_target(site):
     revision = site.current_revision
     assert revision.number == 1
     blockout = revision.blockout
-    assert sorted(l.waypoint for l in blockout.landmarks) == ["lighthouse", "spawn", "village"]
+    assert sorted(l.name for l in blockout.landmarks) == ["lighthouse", "spawn", "village"]
     assert sorted((p.start, p.end) for p in blockout.paths) == [
         ("spawn", "lighthouse"),
         ("spawn", "village"),
@@ -210,3 +210,40 @@ def test_acts_on_a_revision_that_does_not_exist_are_refused(meadow, number):
 def test_approving_before_any_draft_is_refused(meadow):
     with pytest.raises(Refused, match="no Revision"):
         meadow.approve(1, by=ALICE)
+
+
+def test_a_brief_that_fails_the_brief_check_cannot_be_drafted(tmp_path):
+    impossible = {**NO_TARGETS, "walk_targets": [{"from": "spawn", "to": "summit", "time": 60}]}
+    site = Site.create(tmp_path / "broken", Brief.from_dict(impossible))
+
+    assert site.brief_problems() == ["walk spawn→summit names summit, which is not a Waypoint"]
+    with pytest.raises(Refused, match="Brief Check"):
+        site.draft(FakeAgent())
+    assert site.current_revision is None
+
+
+def test_a_blockout_that_misses_a_target_is_still_drafted_and_owns_the_miss(site):
+    brief_before = (site.path / "brief.json").read_text()
+
+    site.draft(FakeAgent())
+
+    blockout = site.current_revision.blockout
+    [village] = [p for p in blockout.paths if p.end == "village"]
+    assert "misses the 60 s target" in village.reason.text
+    [lighthouse] = [p for p in blockout.paths if p.end == "lighthouse"]
+    assert "misses" not in lighthouse.reason.text
+    assert (site.path / "brief.json").read_text() == brief_before
+    assert Site.open(site.path).brief == site.brief
+
+
+def test_the_fake_agent_reads_the_mood_and_shapes_the_ground(site):
+    site.draft(FakeAgent())
+
+    blockout = site.current_revision.blockout
+    readings = {r.phrase: r for r in blockout.readings}
+    assert readings["gentle hills"].measure == "max_slope"
+    assert readings["cozy exploration"].measure is None
+    assert blockout.zones and all(z.reason.text for z in blockout.zones)
+    checks = {r.check: r for r in site.checks()}
+    assert checks["reading gentle hills"].passed
+    assert all(checks[f"pad {name}"].passed for name in site.brief.waypoints)

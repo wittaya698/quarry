@@ -6,6 +6,8 @@ seed, so the same inputs give byte-identical Terrain on any machine.
 import struct
 from dataclasses import dataclass
 
+from quarry.surface import surface
+
 SPACING = 2.0  # metres between height samples
 _CELL = 16.0  # metres per roughness noise cell
 _MASK = 0xFFFFFFFF
@@ -20,6 +22,17 @@ class Terrain:
     blockout_revision: int
     refine_plan_revision: int
 
+    def height(self, x, y):
+        """Height between samples, interpolated, so Checks can measure Terrain
+        exactly as they measure a Blockout."""
+        rows, columns = len(self.heights), len(self.heights[0])
+        u = min(max(x / self.spacing, 0), columns - 1)
+        v = min(max(y / self.spacing, 0), rows - 1)
+        c, r = min(int(u), columns - 2), min(int(v), rows - 2)
+        top = _lerp(self.heights[r][c], self.heights[r][c + 1], u - c)
+        bottom = _lerp(self.heights[r + 1][c], self.heights[r + 1][c + 1], u - c)
+        return _lerp(top, bottom, v - r)
+
     def to_bytes(self):
         rows, columns = len(self.heights), len(self.heights[0])
         header = struct.pack(
@@ -32,12 +45,20 @@ class Terrain:
 def build_terrain(brief, blockout_revision, refine_plan_revision):
     width, depth = brief.footprint
     columns, rows = round(width / SPACING) + 1, round(depth / SPACING) + 1
-    [ground] = refine_plan_revision.plan.surfaces
-    heights = tuple(
-        tuple(ground.roughness * _noise(ground.seed, c * SPACING, r * SPACING) for c in range(columns))
-        for r in range(rows)
-    )
-    vegetation = tuple((ground.vegetation_density,) * columns for _ in range(rows))
+    shape = surface(blockout_revision.blockout)
+    refinements = {s.surface: s for s in refine_plan_revision.plan.surfaces}
+    heights, vegetation = [], []
+    for r in range(rows):
+        height_row, vegetation_row = [], []
+        for c in range(columns):
+            x, y = c * SPACING, r * SPACING
+            # Surface values come from the topmost Zone alone, never a blend.
+            own = refinements[shape.owner(x, y)]
+            height_row.append(shape.height(x, y) + own.roughness * _noise(own.seed, x, y))
+            vegetation_row.append(own.vegetation_density)
+        heights.append(tuple(height_row))
+        vegetation.append(tuple(vegetation_row))
+    heights, vegetation = tuple(heights), tuple(vegetation)
     return Terrain(
         (width, depth), SPACING, heights, vegetation, blockout_revision.number, refine_plan_revision.number
     )
