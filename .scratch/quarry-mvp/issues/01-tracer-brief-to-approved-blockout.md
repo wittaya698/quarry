@@ -16,15 +16,15 @@ This slice establishes the Python package, the Ledger, the Agent port with its f
 
 ## Acceptance criteria
 
-- [ ] The CLI creates a Site from a Brief file, with defaults for Walk Speed and Max Walkable Slope
-- [ ] Drafting with the fake Agent produces a Blockout Revision with one Landmark per Waypoint, one Path per Walk Target, and a Reason on every choice
-- [ ] The walk-time Check reports target, measured value and pass/miss; a straight Path on flat Ground measures exactly length ÷ Walk Speed
-- [ ] `status` prints the current Checkpoint, Revision and Check results
-- [ ] Approve names one Revision; it is refused for a non-current Revision, and refused while any missed Check lacks a Waiver
-- [ ] Reject requires a note; the rejected Revision is kept and viewable, and can be revived as a new Revision
-- [ ] Approve, Waive and Reject record who and when; the Ledger refuses them from the Agent or any non-human caller, with no bypass setting
-- [ ] A new Site can be created from a copy of an existing Site's Brief, with independent history
-- [ ] Tests cover the Ledger rules, the walk Check and the fake-Agent path through public interfaces only
+- [x] The CLI creates a Site from a Brief file, with defaults for Walk Speed and Max Walkable Slope
+- [x] Drafting with the fake Agent produces a Blockout Revision with one Landmark per Waypoint, one Path per Walk Target, and a Reason on every choice
+- [x] The walk-time Check reports target, measured value and pass/miss; a straight Path on flat Ground measures exactly length ÷ Walk Speed
+- [x] `status` prints the current Checkpoint, Revision and Check results
+- [x] Approve names one Revision; it is refused for a non-current Revision, and refused while any missed Check lacks a Waiver
+- [x] Reject requires a note; the rejected Revision is kept and viewable, and can be revived as a new Revision
+- [x] Approve, Waive and Reject record who and when; the Ledger refuses them from the Agent or any non-human caller, with no bypass setting
+- [x] A new Site can be created from a copy of an existing Site's Brief, with independent history
+- [x] Tests cover the Ledger rules, the walk Check and the fake-Agent path through public interfaces only
 
 ## Blocked by
 

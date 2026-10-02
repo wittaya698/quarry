@@ -1,0 +1,19 @@
+[project]
+name = "quarry"
+version = "0.1.0"
+description = "Terrain authoring: an AI drafts, a human approves at every Checkpoint."
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+quarry = "quarry.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
