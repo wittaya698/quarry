@@ -7,13 +7,14 @@ Two Drafts pass a Checkpoint each — the Blockout, then the Refine Plan — und
 the same rules, so both are kept by one `_Stage`.
 """
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
 from quarry.blockout import Blockout
 from quarry.brief import Brief, brief_check
 from quarry.checks import run_checks
+from quarry.edits import apply_edit
 from quarry.export import export_glb, verify_export
 from quarry.identity import Human
 from quarry.refine import RefinePlan
@@ -29,6 +30,7 @@ class Revision:
     number: int
     blockout: Blockout
     revived_from: int | None = None
+    edited_by: Human | None = None  # the human who made this Revision by editing
 
 
 @dataclass(frozen=True)
@@ -99,7 +101,10 @@ class _Stage:
         kind = entry["kind"]
         if kind == "revision":
             draft = self.draft_type.from_dict(entry[self.field])
-            self.revisions.append(self.revision_type(entry["number"], draft, entry["revived_from"]))
+            revision = self.revision_type(entry["number"], draft, entry["revived_from"])
+            if entry.get("edited_by"):
+                revision = replace(revision, edited_by=Human(entry["edited_by"]))
+            self.revisions.append(revision)
         elif kind == "approval":
             at = datetime.fromisoformat(entry["at"])
             self.approval = Approval(entry["revision"], Human(entry["by"]), at, entry["waivers"])
@@ -151,6 +156,17 @@ class Site:
         if problems:
             raise Refused(f"the Brief fails the Brief Check: {'; '.join(problems)}")
         self._append(self._blockout, agent.draft_blockout(self.brief))
+
+    def edit(self, number, change, by):
+        """A human edit of the current Revision: a new Revision, no Agent call."""
+        _require_human(by, "edit")
+        self._blockout.refuse_revision()
+        self._blockout.revision(number)
+        current = self.current_revision.number
+        if number != current:
+            raise Refused(f"cannot edit Revision {number}: Revision {current} is current")
+        blockout = apply_edit(self.revision(number).blockout, change)
+        self._append(self._blockout, blockout, edited_by=by)
 
     def revive(self, number):
         self._append(self._blockout, self.revision(number).blockout, revived_from=number)
@@ -260,17 +276,17 @@ class Site:
 
     # --- History ----------------------------------------------------------
 
-    def _append(self, stage, draft, revived_from=None):
+    def _append(self, stage, draft, revived_from=None, edited_by=None):
         stage.refuse_revision()
-        self._record(
-            stage,
-            {
-                "kind": "revision",
-                "number": len(stage.revisions) + 1,
-                stage.field: draft.to_dict(),
-                "revived_from": revived_from,
-            },
-        )
+        entry = {
+            "kind": "revision",
+            "number": len(stage.revisions) + 1,
+            stage.field: draft.to_dict(),
+            "revived_from": revived_from,
+        }
+        if edited_by is not None:
+            entry["edited_by"] = edited_by.name
+        self._record(stage, entry)
 
     def _record(self, stage, entry):
         entry = {"stage": stage.key, **entry}

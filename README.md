@@ -4,7 +4,7 @@ A terrain-authoring tool for game developers. An AI agent drafts the terrain, an
 
 You write a **Brief**: a footprint, the places you care about, how long it should take to walk between them, and a mood. The AI drafts a coarse **Blockout** with a **Reason** for each choice. Quarry then measures that Blockout against your targets rather than taking the AI's word for it. Nothing moves on until you approve one exact **Revision**.
 
-> **Status: early.** The skeleton runs end to end from the CLI with a fake Agent: Brief → Brief Check → Blockout (Zones, Pads, Readings) → all Blockout Checks → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. The Checks can already measure Terrain, but Checkpoint #2 doesn't run them yet, and the Export holds only the terrain mesh and its collision. The browser Checkpoint pages and the Claude-backed Agent are planned. See [the roadmap](#roadmap).
+> **Status: early.** The skeleton runs end to end from the CLI with a fake Agent: Brief → Brief Check → Blockout (Zones, Pads, Readings) → all Blockout Checks → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. Checkpoint #1 has a browser page for viewing, editing and approving the Blockout. The Checks can already measure Terrain, but Checkpoint #2 doesn't run them yet and has no page, and the Export holds only the terrain mesh and its collision. The Claude-backed Agent is planned. See [the roadmap](#roadmap).
 
 ## Quick start
 
@@ -33,7 +33,19 @@ drafted Revision 1
 
 A Brief that's provably impossible, for example a Walk Target naming an undefined Waypoint or one too long to fit in the footprint, fails the **Brief Check**. `status` lists the problems, and `draft` is refused until the Brief is fixed.
 
-Approve the Blockout (waiving the miss), then draft, approve and export the Refine Plan:
+Review the Blockout in the browser:
+
+```sh
+uv run quarry open island
+```
+
+The page shows the Blockout top-down, with Zones (Combine Mode and Stacking Order), Landmarks and their Pads (★ marks one the AI chose), Paths, Readings and every Reason, plus live Check results.
+- Drag a Landmark or Zone to move it, or a Zone's rim to resize it.
+- Set a Zone's height, Combine Mode or Stacking Order, or a Reading's limit, in the side panel.
+- Each edit is a new Revision. The Checks re-measure straight away, with no Agent call, and the edited element's Reason becomes yours.
+- Approve the Revision named on the button (with a Waiver for each missed Check), or reject it with a note.
+
+Or approve from the terminal, waiving the miss, then draft, approve and export the Refine Plan:
 
 ```sh
 uv run quarry approve island 1 --waive "walk spawn→village=the village can be farther"
@@ -77,6 +89,7 @@ exported island.glb from Blockout Revision 1 and Refine Plan Revision 1; collisi
 | `quarry new SITE --from OTHER_SITE`              | Create a variant Site from a copy of another Site's Brief, with its own history |
 | `quarry draft SITE`                              | Ask the Agent for a new Blockout Revision                    |
 | `quarry refine SITE`                             | Ask the Agent for a new Refine Plan Revision (needs an approved Blockout) |
+| `quarry open SITE [--port N] [--no-browser]`    | Serve the Checkpoint #1 page on 127.0.0.1 and open it; Ctrl-C stops it |
 | `quarry status SITE`                             | Both Checkpoints' state, Revisions and Check results, or Brief Check problems before the first Draft |
 | `quarry show SITE N`                             | Revision N of the Draft at the current Checkpoint (Landmarks and Pads, Paths, Zones in Stacking Order, Readings), each choice with its Reason |
 | `quarry approve SITE N [--waive "CHECK=WHY"]...` | Approve Revision N at the current Checkpoint; every missed Check needs a Waiver |
@@ -108,6 +121,8 @@ The Brief Check flags a Walk Target only when no route could meet it: one longer
 - **Approval names one exact Revision.** Approving any Revision other than the current one is refused, and so is approving a rejected one.
 - **Misses are never silent.** Approval is refused while any missed Check lacks a Waiver.
 - **Human acts are human-only.** Only a human can approve, waive or reject. The Site refuses these acts from the Agent or from any automated caller, and no setting turns this off. When the CLI is run without a terminal (from a pipe, script or CI), it passes an automated identity, so the act is refused. See [ADR-0004](docs/adr/0004-checkpoint-acts-are-human-only-enforced-in-core.md).
+- **Edits make Revisions.** A human edit (moving a Landmark, which brings its Paths' ends along; moving, resizing, re-heighting or recombining a Zone; restacking Zones; changing a Reading's limit) applies to the current Revision only and creates the next one, recording who made it. Whatever it touched gets a human Reason, and everything else keeps the AI's. Edits are human-only, and an approved Blockout can't be edited.
+- **The page acts as you, or as no one.** `quarry open` fixes its caller at launch: you, when run from a terminal, otherwise an automated caller, so every act the page sends is refused. The page listens only on 127.0.0.1, and every request must carry the random token in the URL it printed.
 - **Rejections need a note** and keep the Revision. A rejected Revision stays viewable and can be revived.
 - **Nothing is built on an unapproved Blockout.** A Refine Plan is refused until the Blockout is approved, and the Refine Plan passes its own Checkpoint under the same rules.
 - **One definition of height.** Zones combine in Stacking Order by their Combine Mode (`add`, `max` or `replace`). Each point takes its surface values, such as roughness and vegetation, from its topmost Zone alone, never from a blend. Checks and the Terrain Builder share this one definition.
@@ -125,6 +140,9 @@ Tests use only the public interfaces, and they never call a live LLM.
 ```
 quarry/
   site.py       Site: Brief + append-only history; Checkpoint rules for both Drafts
+  edits.py      Human edits: one change to a Blockout → the next Revision
+  page.py       Checkpoint #1 server (127.0.0.1, token-guarded), over one Site
+  checkpoint1.html  The Checkpoint #1 page: top-down SVG editor, plain JavaScript
   checks.py     Checks: walk, slope, Pad and Reading Checks, measured on any surface
   surface.py    Surface: Ground + Zones → height and topmost Zone at any point
   agent.py      Agent port and the deterministic FakeAgent
@@ -155,7 +173,7 @@ The MVP is planned as ten vertical slices in [.scratch/quarry-mvp/issues/](.scra
 1. ✅ Tracer: Brief → Blockout → Checks → Approve/Reject via CLI
 2. ✅ Tracer: Refine Plan → Terrain → `.glb`
 3. ✅ All Blockout Checks: overlapping Zones, slope-aware walking, Brief Check, Readings, Pads
-4. Checkpoint #1 page: a top-down Blockout view in the browser, with edits and human acts
+4. ✅ Checkpoint #1 page: a top-down Blockout view in the browser, with edits and human acts
 5. Checkpoint #2: Checks on Terrain, Waivers per Checkpoint, and a walkable preview
 6. Live Agent: a Claude-backed adapter with a validation layer
 7. Draft quality review (human)
