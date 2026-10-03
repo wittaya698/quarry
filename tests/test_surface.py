@@ -1,3 +1,5 @@
+import pytest
+
 from quarry.blockout import Blockout, Reason, Zone
 from quarry.surface import surface
 
@@ -56,3 +58,36 @@ def test_a_dome_rises_smoothly_from_its_rim_to_full_height_at_its_centre():
     assert abs(ground.height(20, 0) - 6) < 1e-9
     assert abs(ground.height(39.99, 0)) < 1e-3
     assert ground.height(41, 0) == 0
+
+
+def refined(zone, profile, falloff):
+    from quarry.refine import RefinePlan, Refinement
+
+    def refinement(name, width):
+        return Refinement(name, profile, width, 0.0, 1, 0.0, AI)
+
+    plan = RefinePlan((refinement("ground", 0.0), refinement(zone.name, falloff)))
+    return surface(Blockout(landmarks=(), paths=(), zones=(zone,)), plan)
+
+
+def test_a_refined_zone_edge_ramps_over_its_falloff_width_instead_of_stepping():
+    mesa = Zone("mesa", (0, 0), 50, 10, "flat", "add", AI)
+
+    hard = zones(mesa)
+    ramp = refined(mesa, "linear", 20)
+
+    assert (hard.height(49, 0), hard.height(51, 0)) == (10, 0)
+    assert ramp.height(39, 0) == 10 and ramp.height(61, 0) == 0
+    assert ramp.height(50, 0) == pytest.approx(5)
+    assert ramp.height(45, 0) == pytest.approx(7.5)  # linear: an even 26.6° ramp
+
+
+def test_the_slope_profile_shapes_the_ramp():
+    mesa = Zone("mesa", (0, 0), 50, 10, "flat", "add", AI)
+
+    linear, smooth, steep = (refined(mesa, p, 20) for p in ("linear", "smooth", "steep"))
+
+    assert linear.height(50, 0) == smooth.height(50, 0) == pytest.approx(5)  # each keeps the Zone's size
+    assert smooth.height(58, 0) < linear.height(58, 0)  # eases in at the foot
+    assert steep.height(58, 0) < smooth.height(58, 0)  # steep packs the climb into the middle
+    assert steep.height(42, 0) > smooth.height(42, 0)

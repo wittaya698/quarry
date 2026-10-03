@@ -146,3 +146,89 @@ def test_the_page_itself_is_served_at_its_url(page):
 
     assert response.headers["Content-Type"].startswith("text/html")
     assert "Checkpoint #1" in html
+
+
+@pytest.fixture
+def terrain_page(island):
+    """The page for a Site at Checkpoint #2."""
+    island.approve(1, by=ALICE, waivers={"walk spawn→village": "farther is fine"})
+    island.draft_refine_plan(FakeAgent())
+    server = running(island, ALICE)
+    yield server
+    server.shutdown()
+
+
+def test_at_checkpoint_2_the_page_state_carries_the_refine_plan_terrain_and_terrain_checks(terrain_page):
+    status, state = call(terrain_page, "/api/state")
+
+    assert status == 200
+    assert state["checkpoint"] == 2 and state["revision"] == 1 and state["state"] == "awaiting review"
+    assert all(s["reason"]["text"] for s in state["refine_plan"]["surfaces"])
+    site = Site.open(terrain_page.site_path)
+    terrain = site.terrain()
+    assert state["terrain"]["spacing"] == terrain.spacing
+    assert state["terrain"]["heights"] == [list(row) for row in terrain.heights]
+    assert state["walk_speed"] == 1.4 and state["max_walkable_slope"] == 30
+    measured = {c["check"]: c["measured"] for c in state["checks"]}
+    assert measured == {r.check: r.measured for r in site.terrain_checks()}
+    assert state["waivers"] == {}  # Checkpoint #1's Waivers are not this Checkpoint's
+
+
+def test_at_checkpoint_2_an_edit_rebuilds_the_terrain(terrain_page):
+    _, before = call(terrain_page, "/api/state")
+
+    status, state = call(terrain_page, "/api/edit", {"revision": 1, "change": {"surface": "ground", "roughness": 2.0}})
+
+    assert status == 200 and state["revision"] == 2
+    ground = next(s for s in state["refine_plan"]["surfaces"] if s["surface"] == "ground")
+    assert ground["roughness"] == 2.0 and ground["reason"]["author"] == "human"
+    assert state["terrain"]["heights"] != before["terrain"]["heights"]
+    assert Site.open(terrain_page.site_path).current_refine_plan.edited_by == ALICE
+
+
+def test_at_checkpoint_2_approval_needs_fresh_waivers_and_records_who(terrain_page):
+    status, reply = call(terrain_page, "/api/approve", {"revision": 1, "waivers": {}})
+    assert status == 409 and "no Waiver for walk spawn→village" in reply["error"]
+
+    status, state = call(terrain_page, "/api/approve", {"revision": 1, "waivers": {"walk spawn→village": "on Terrain too"}})
+
+    assert status == 200 and state["state"] == "approved by alice"
+    approval = Site.open(terrain_page.site_path).refine_plan_approval
+    assert approval.by == ALICE and approval.waivers == {"walk spawn→village": "on Terrain too"}
+
+
+def test_at_checkpoint_2_rejecting_needs_a_note(terrain_page):
+    status, reply = call(terrain_page, "/api/reject", {"revision": 1, "note": ""})
+    assert status == 409 and "note" in reply["error"]
+
+    status, state = call(terrain_page, "/api/reject", {"revision": 1, "note": "too smooth"})
+
+    assert status == 200 and state["state"] == "rejected"
+    [rejection] = Site.open(terrain_page.site_path).refine_plan_rejections
+    assert (rejection.by, rejection.note) == (ALICE, "too smooth")
+
+
+def test_at_checkpoint_2_a_page_with_no_person_at_the_keyboard_cannot_act(island):
+    island.approve(1, by=ALICE, waivers={"walk spawn→village": "fine"})
+    island.draft_refine_plan(FakeAgent())
+    server = running(island, Automated("non-interactive quarry"))
+    try:
+        for route, body in (
+            ("/api/approve", {"revision": 1, "waivers": {"walk spawn→village": "fine"}}),
+            ("/api/reject", {"revision": 1, "note": "no"}),
+            ("/api/edit", {"revision": 1, "change": {"surface": "ground", "roughness": 1.0}}),
+        ):
+            status, reply = call(server, route, body)
+            assert status == 409 and "only a human" in reply["error"]
+    finally:
+        server.shutdown()
+    reopened = Site.open(island.path)
+    assert reopened.refine_plan_approval is None and not reopened.refine_plan_rejections
+    assert reopened.current_refine_plan.number == 1
+
+
+def test_at_checkpoint_2_the_walkable_preview_page_is_served(terrain_page):
+    with urllib.request.urlopen(terrain_page.url) as response:
+        html = response.read().decode()
+
+    assert "Checkpoint #2" in html

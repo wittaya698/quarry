@@ -41,7 +41,7 @@ def _parser():
     refine.add_argument("site")
     refine.set_defaults(run=_refine)
 
-    page = commands.add_parser("open", help="open the Checkpoint #1 page in the browser")
+    page = commands.add_parser("open", help="open the current Checkpoint's page in the browser")
     page.add_argument("site")
     page.add_argument("--port", type=int, default=0, help="a fixed port; any free one by default")
     page.add_argument("--no-browser", action="store_true", help="print the URL without opening it")
@@ -102,13 +102,14 @@ def _draft(args):
     site = Site.open(args.site)
     site.draft(FakeAgent())
     print(f"drafted Revision {site.current_revision.number}")
-    _print_checks(site)
+    _print_checks(site.checks(), site.approval, site.current_revision.blockout)
 
 
 def _refine(args):
     site = Site.open(args.site)
     site.draft_refine_plan(FakeAgent())
     print(f"drafted Refine Plan Revision {site.current_refine_plan.number}")
+    _print_checks(site.terrain_checks(), site.refine_plan_approval, site.current_revision.blockout)
 
 
 def _open(args):
@@ -116,7 +117,7 @@ def _open(args):
     if site.current_revision is None:
         raise Refused(f"nothing to review yet; run `quarry draft {args.site}` first")
     server = serve(args.site, _caller(), port=args.port)
-    print(f"Checkpoint #1 page for {args.site}: {server.url}")
+    print(f"Checkpoint page for {args.site}: {server.url}")
     print("acting as", server.caller.name, "· Ctrl-C to stop")
     if not args.no_browser:
         webbrowser.open(server.url)
@@ -141,7 +142,7 @@ def _status(args):
         print(f"Checkpoint 1 · no Draft yet (run `quarry draft {args.site}`)")
         return
     print(f"Checkpoint 1 · Blockout Revision {revision.number} · {_state(revision, site.approval, site.rejections)}")
-    _print_checks(site)
+    _print_checks(site.checks(), site.approval, site.current_revision.blockout)
     if site.checkpoint == 1:
         return
     plan = site.current_refine_plan
@@ -149,7 +150,8 @@ def _status(args):
         print(f"Checkpoint 2 · no Refine Plan yet (run `quarry refine {args.site}`)")
         return
     state = _state(plan, site.refine_plan_approval, site.refine_plan_rejections)
-    print(f"Checkpoint 2 · Refine Plan Revision {plan.number} · {state}")
+    print(f"Checkpoint 2 · Refine Plan Revision {plan.number} · {state} · Checks on the Terrain:")
+    _print_checks(site.terrain_checks(), site.refine_plan_approval, site.current_revision.blockout)
     if site.checkpoint == "done":
         print(f"ready to export (run `quarry export {args.site} {args.site}.glb`)")
 
@@ -258,14 +260,14 @@ def _waiver(text):
     return check.strip(), why.strip()
 
 
-def _print_checks(site):
-    for result in site.checks():
-        waived = site.approval and result.check in site.approval.waivers
+def _print_checks(results, approval, blockout):
+    for result in results:
+        waived = approval and result.check in approval.waivers
         mark = "pass" if result.passed else "waived" if waived else "MISS"
         measured, target = _amount(result.measured, result.unit), _amount(result.target, result.unit)
         goal = f"≤ {target}" if result.at_most else f"/ {target} ±{result.tolerance:.0%}"
         print(f"  {mark:6}  {result.check}  {measured} {goal}")
-    for reading in site.current_revision.blockout.readings:
+    for reading in blockout.readings:
         if reading.measure is None:
             print(f"  {'—':6}  reading {reading.phrase}  not measurable: {reading.meaning}")
 

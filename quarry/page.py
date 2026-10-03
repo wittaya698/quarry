@@ -1,4 +1,5 @@
-"""The Checkpoint #1 page: a local server over one Site.
+"""The Checkpoint pages: a local server over one Site, showing whichever
+Checkpoint it is at — the Blockout editor at #1, the walkable Terrain at #2.
 
 Every request re-opens the Site from disk, so its history stays the only
 source of truth. The caller is fixed when the server starts, and every act is
@@ -12,10 +13,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from quarry.checks import run_checks
 from quarry.edits import EditError
 from quarry.site import Refused, Site
 
-_PAGE = Path(__file__).with_name("checkpoint1.html")
+_PAGES = {1: Path(__file__).with_name("checkpoint1.html"), 2: Path(__file__).with_name("checkpoint2.html")}
 
 
 def serve(site_path, caller, port=0):
@@ -40,7 +42,8 @@ class _Handler(BaseHTTPRequestHandler):
         if route is None:
             return
         if route == "/":
-            self._send(200, "text/html; charset=utf-8", _PAGE.read_bytes())
+            page = _PAGES[1 if _at_first(Site.open(self.server.site_path)) else 2]
+            self._send(200, "text/html; charset=utf-8", page.read_bytes())
         elif route == "/api/state":
             self._json(200, _state(Site.open(self.server.site_path)))
         else:
@@ -90,28 +93,58 @@ class _Handler(BaseHTTPRequestHandler):
         pass  # keep the terminal for the developer
 
 
+def _at_first(site):
+    """Checkpoint #1's view, which stays up, approved, until a Refine Plan is drafted."""
+    return site.checkpoint == 1 or site.current_refine_plan is None
+
+
+# Each act goes to whichever Checkpoint the Site is at; the core decides the rest.
 _ACTS = {
-    "/api/edit": lambda site, body, caller: site.edit(body["revision"], body["change"], by=caller),
-    "/api/approve": lambda site, body, caller: site.approve(body["revision"], by=caller, waivers=body["waivers"]),
-    "/api/reject": lambda site, body, caller: site.reject(body["revision"], by=caller, note=body["note"]),
+    "/api/edit": lambda site, body, caller: (site.edit if _at_first(site) else site.edit_refine_plan)(
+        body["revision"], body["change"], by=caller
+    ),
+    "/api/approve": lambda site, body, caller: (site.approve if _at_first(site) else site.approve_refine_plan)(
+        body["revision"], by=caller, waivers=body["waivers"]
+    ),
+    "/api/reject": lambda site, body, caller: (site.reject if _at_first(site) else site.reject_refine_plan)(
+        body["revision"], by=caller, note=body["note"]
+    ),
 }
 
 
 def _state(site):
-    revision = site.current_revision
+    if _at_first(site):
+        revision, approval, rejections = site.current_revision, site.approval, site.rejections
+        blockout, checks = revision.blockout, site.checks()
+        extra = {}
+    else:
+        revision, approval = site.current_refine_plan, site.refine_plan_approval
+        rejections = site.refine_plan_rejections
+        blockout = site.revision(site.approval.revision).blockout
+        terrain = site.terrain()
+        checks = run_checks(site.brief, blockout, terrain)
+        extra = {
+            "blockout_revision": site.approval.revision,
+            "refine_plan": revision.plan.to_dict(),
+            "terrain": {"spacing": terrain.spacing, "heights": terrain.heights},
+            "walk_speed": site.brief.walk_speed,
+            "max_walkable_slope": site.brief.max_walkable_slope,
+        }
     return {
+        "checkpoint": 1 if _at_first(site) else 2,
         "footprint": list(site.brief.footprint),
         "revision": revision.number,
-        "state": _review_state(site, revision),
-        "blockout": revision.blockout.to_dict(),
-        "checks": [asdict(r) for r in site.checks()],
-        "waivers": site.approval.waivers if site.approval else {},
+        "state": _review_state(revision, approval, rejections),
+        "blockout": blockout.to_dict(),
+        "checks": [asdict(r) for r in checks],
+        "waivers": approval.waivers if approval else {},
+        **extra,
     }
 
 
-def _review_state(site, revision):
-    if site.approval:
-        return f"approved by {site.approval.by.name}"
-    if any(r.revision == revision.number for r in site.rejections):
+def _review_state(revision, approval, rejections):
+    if approval:
+        return f"approved by {approval.by.name}"
+    if any(r.revision == revision.number for r in rejections):
         return "rejected"
     return "awaiting review"

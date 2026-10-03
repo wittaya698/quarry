@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quarry · Checkpoint #2</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #ffffff; --ink: #1f2328; --muted: #6a6f76; --line: #d9d7d0;
+    --pass: #1a7f37; --miss: #c62828; --waived: #9a6700; --human: #0b62c4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181b; --panel: #1e2125; --ink: #e6e6e3; --muted: #9aa0a6; --line: #33373c;
+      --pass: #4ac26b; --miss: #ff6b6b; --waived: #d4a72c; --human: #58a6ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, sans-serif; }
+  header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; }
+  header .state { color: var(--muted); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; padding: 16px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .view { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 4 / 3; }
+  .view canvas { display: block; width: 100%; height: 100%; }
+  .hud { position: absolute; left: 10px; top: 10px; color: #fff; background: rgba(0,0,0,.55); padding: 6px 9px; border-radius: 6px; font: 12px/1.4 ui-monospace, monospace; pointer-events: none; white-space: pre; }
+  .hud .blocked { color: #ff8a80; }
+  .hint { color: var(--muted); font-size: 12px; margin: 6px 4px 0; }
+  aside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td { padding: 3px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+  tr:first-child td { border-top: 0; }
+  .pass { color: var(--pass); font-weight: 600; }
+  .miss { color: var(--miss); font-weight: 600; }
+  .waived { color: var(--waived); font-weight: 600; }
+  .na { color: var(--muted); }
+  .reason { color: var(--muted); font-size: 12px; }
+  .reason.human { color: var(--human); }
+  .surface { padding: 8px 0; border-top: 1px solid var(--line); }
+  .surface:first-of-type { border-top: 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+  label { display: block; margin: 6px 0 2px; font-size: 12px; color: var(--muted); }
+  input, select, textarea, button { font: inherit; color: inherit; }
+  input, select, textarea { width: 100%; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+  textarea { min-height: 56px; }
+  button { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  button.primary { background: var(--pass); color: #fff; border-color: var(--pass); }
+  button.danger { background: var(--miss); color: #fff; border-color: var(--miss); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .error { background: color-mix(in srgb, var(--miss) 15%, var(--panel)); border-color: var(--miss); display: none; }
+  .error.shown { display: block; }
+</style>
+<script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<header>
+  <h1>Quarry · Checkpoint #2 · Refine Plan</h1>
+  <span class="state" id="state">loading…</span>
+</header>
+<main>
+  <div>
+    <div class="view" id="view"><div class="hud" id="hud"></div></div>
+    <p class="hint">Click the view to walk: W A S D to move at the Brief's Walk Speed, the mouse to look, Esc to let go. You can't climb anything steeper than the Max Walkable Slope or leave the footprint. Press O for an overview from above. Blue rings are Pads, and white lines are Paths.</p>
+  </div>
+  <aside>
+    <section class="error" id="error"></section>
+    <section><h2>Checks on the Terrain</h2><table id="checks"></table></section>
+    <section><h2>Refine Plan</h2><div id="plan"></div></section>
+    <section id="acts"><h2>Approve or reject</h2></section>
+  </aside>
+</main>
+<script type="module">
+import * as THREE from "three";
+
+const token = new URLSearchParams(location.search).get("token");
+const EYE = 1.7; // metres above the ground
+let state = null;
+
+async function api(route, body) {
+  const options = body === undefined ? {} : { method: "POST", body: JSON.stringify(body) };
+  const response = await fetch(`${route}?token=${encodeURIComponent(token)}`, options);
+  const reply = await response.json();
+  if (!response.ok) throw new Error(reply.error);
+  return reply;
+}
+
+async function act(route, body) {
+  try {
+    state = await api(route, body);
+    showError(null);
+  } catch (error) {
+    showError(error.message);
+    state = await api("/api/state");
+  }
+  render();
+}
+
+function showError(message) {
+  const box = document.getElementById("error");
+  box.textContent = message || "";
+  box.classList.toggle("shown", Boolean(message));
+}
+
+const editable = () => state.state === "awaiting review";
+const h = (tag, attrs = {}, ...children) => {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else if (v !== false && v !== null && v !== undefined) node.setAttribute(k, v === true ? "" : v);
+  }
+  for (const child of children.flat()) node.append(child);
+  return node;
+};
+const reason = (r) => h("div", { class: `reason ${r.author}` }, `${r.author === "human" ? "you" : "AI"}: ${r.text}`);
+
+function amount(value, unit) {
+  if (unit === "s") {
+    const total = Math.round(value);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+  }
+  if (unit === "°") return `${value.toFixed(1)}°`;
+  return `${value.toFixed(0)} m`;
+}
+
+// --- Terrain sampling, the same bilinear rule the core's Checks use --------
+
+function heightAt(x, y) {
+  const { spacing, heights } = state.terrain;
+  const rows = heights.length, columns = heights[0].length;
+  const u = Math.min(Math.max(x / spacing, 0), columns - 1);
+  const v = Math.min(Math.max(y / spacing, 0), rows - 1);
+  const c = Math.min(Math.floor(u), columns - 2), r = Math.min(Math.floor(v), rows - 2);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const top = lerp(heights[r][c], heights[r][c + 1], u - c);
+  const bottom = lerp(heights[r + 1][c], heights[r + 1][c + 1], u - c);
+  return lerp(top, bottom, v - r);
+}
+
+// --- The 3D view -----------------------------------------------------------
+
+const view = document.getElementById("view");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+view.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbcd4e6);
+const fog = new THREE.Fog(0xbcd4e6, 150, 700);
+scene.fog = fog;
+const camera = new THREE.PerspectiveCamera(70, 4 / 3, 0.1, 3000);
+camera.rotation.order = "YXZ";
+scene.add(new THREE.HemisphereLight(0xffffff, 0x556644, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(-200, 300, -100);
+scene.add(sun);
+let world = null;
+
+function resize() {
+  const { clientWidth: w, clientHeight: hgt } = view;
+  renderer.setSize(w, hgt, false);
+  camera.aspect = w / hgt;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(view);
+
+// Site (x, y, height) → three (x, height, y), as in the .glb Export.
+const toScene = (x, y, z) => new THREE.Vector3(x, z, y);
+
+function buildWorld() {
+  if (world) {
+    scene.remove(world);
+    world.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+  }
+  world = new THREE.Group();
+  const { spacing, heights } = state.terrain;
+  const rows = heights.length, columns = heights[0].length;
+  const positions = new Float32Array(rows * columns * 3);
+  const colors = new Float32Array(rows * columns * 3);
+  const flat = new THREE.Color(0x6f9a4a), steep = new THREE.Color(0x8a6d4b), rock = new THREE.Color(0x9a9a96);
+  const limit = state.max_walkable_slope;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < columns; c++) {
+      const i = (r * columns + c) * 3;
+      positions[i] = c * spacing; positions[i + 1] = heights[r][c]; positions[i + 2] = r * spacing;
+      const dx = (heights[r][Math.min(c + 1, columns - 1)] - heights[r][Math.max(c - 1, 0)]) / (2 * spacing);
+      const dy = (heights[Math.min(r + 1, rows - 1)][c] - heights[Math.max(r - 1, 0)][c]) / (2 * spacing);
+      const slope = Math.atan(Math.hypot(dx, dy)) * 180 / Math.PI;
+      const color = slope > limit ? rock : flat.clone().lerp(steep, Math.min(slope / limit, 1));
+      colors[i] = color.r; colors[i + 1] = color.g; colors[i + 2] = color.b;
+    }
+  }
+  const indices = [];
+  for (let r = 0; r < rows - 1; r++) {
+    for (let c = 0; c < columns - 1; c++) {
+      const v00 = r * columns + c, v10 = v00 + 1, v01 = v00 + columns, v11 = v01 + 1;
+      indices.push(v00, v01, v10, v10, v01, v11);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  world.add(new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true })));
+
+  for (const path of state.blockout.paths) {
+    const points = [];
+    for (let i = 0; i < path.points.length - 1; i++) {
+      const [ax, ay] = path.points[i], [bx, by] = path.points[i + 1];
+      const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay)));
+      for (let s = 0; s <= steps; s++) {
+        const x = ax + (bx - ax) * s / steps, y = ay + (by - ay) * s / steps;
+        points.push(toScene(x, y, heightAt(x, y) + 0.15));
+      }
+    }
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({ color: path.decorative ? 0xdddddd : 0xffffff }));
+    world.add(line);
+  }
+  for (const landmark of state.blockout.landmarks) {
+    const [x, y] = landmark.position;
+    const ground = heightAt(x, y);
+    const ring = [];
+    for (let a = 0; a <= 64; a++) {
+      const t = (a / 64) * Math.PI * 2;
+      const px = x + Math.cos(t) * landmark.pad_radius, py = y + Math.sin(t) * landmark.pad_radius;
+      ring.push(toScene(px, py, heightAt(px, py) + 0.1));
+    }
+    world.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ring), new THREE.LineBasicMaterial({ color: 0x2f7bff })));
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 6), new THREE.MeshLambertMaterial({ color: landmark.ai_chosen ? 0xffc107 : 0xe8e8e8 }));
+    post.position.copy(toScene(x, y, ground + 3));
+    world.add(post);
+  }
+  scene.add(world);
+}
+
+// --- The walker ------------------------------------------------------------
+
+const keys = new Set();
+const walker = { x: 0, y: 0, yaw: 0, pitch: 0, overview: false, blocked: false, slope: 0 };
+window.walker = walker; // left open so a script can drive a walk while checking the page
+
+function placeWalker() {
+  const [first] = state.blockout.landmarks;
+  const [w, d] = state.footprint;
+  [walker.x, walker.y] = first ? first.position : [w / 2, d / 2];
+  walker.yaw = Math.atan2(w / 2 - walker.x, d / 2 - walker.y); // face the middle
+}
+
+// Move by (dx, dy) metres unless the step climbs steeper than the Max Walkable Slope.
+function step(dx, dy) {
+  const [w, d] = state.footprint;
+  const nx = Math.min(Math.max(walker.x + dx, 0), w), ny = Math.min(Math.max(walker.y + dy, 0), d);
+  const run = Math.hypot(nx - walker.x, ny - walker.y);
+  if (run === 0) return false;
+  const rise = heightAt(nx, ny) - heightAt(walker.x, walker.y);
+  const slope = Math.atan2(rise, run) * 180 / Math.PI;
+  if (slope > state.max_walkable_slope) return false;
+  walker.x = nx; walker.y = ny; walker.slope = slope;
+  return true;
+}
+
+// Walk for `seconds` along the current facing, forward (+1) or back (-1), in small steps.
+function walk(seconds, forward = 1, strafe = 0) {
+  const length = Math.hypot(forward, strafe);
+  if (length === 0) return;
+  const distance = state.walk_speed * seconds;
+  const along = 0.25;
+  const fx = Math.sin(walker.yaw), fy = Math.cos(walker.yaw);
+  const sx = Math.cos(walker.yaw), sy = -Math.sin(walker.yaw);
+  const ux = (forward * fx + strafe * sx) / length, uy = (forward * fy + strafe * sy) / length;
+  walker.blocked = false;
+  for (let done = 0; done < distance; done += along) {
+    const d = Math.min(along, distance - done);
+    if (!step(ux * d, uy * d) && !step(ux * d, 0) && !step(0, uy * d)) { walker.blocked = true; break; }
+  }
+}
+walker.walk = walk;
+
+renderer.domElement.addEventListener("click", () => renderer.domElement.requestPointerLock());
+document.addEventListener("mousemove", (e) => {
+  if (document.pointerLockElement !== renderer.domElement) return;
+  walker.yaw -= e.movementX * 0.0025;
+  walker.pitch = Math.min(Math.max(walker.pitch - e.movementY * 0.0025, -1.4), 1.4);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest("input, select, textarea")) return;
+  if (e.code === "KeyO") walker.overview = !walker.overview;
+  keys.add(e.code);
+});
+document.addEventListener("keyup", (e) => keys.delete(e.code));
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 0.1);
+  last = now;
+  if (state) {
+    const forward = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0);
+    const strafe = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
+    if (!walker.overview) walk(dt, forward, -strafe);
+    const [w, d] = state.footprint;
+    scene.fog = walker.overview ? null : fog;
+    if (walker.overview) {
+      camera.position.set(w / 2, Math.max(w, d) * 0.9, d * 1.25);
+      camera.lookAt(w / 2, 0, d / 2);
+    } else {
+      camera.position.copy(toScene(walker.x, walker.y, heightAt(walker.x, walker.y) + EYE));
+      camera.rotation.set(walker.pitch, walker.yaw + Math.PI, 0);
+    }
+    document.getElementById("hud").innerHTML =
+      `${walker.overview ? "overview (O to walk)" : `walking at ${state.walk_speed} m/s`}\n` +
+      `at (${walker.x.toFixed(0)}, ${walker.y.toFixed(0)}) · ground ${heightAt(walker.x, walker.y).toFixed(1)} m\n` +
+      (walker.blocked ? `<span class="blocked">too steep: over ${state.max_walkable_slope}°</span>` : `slope ${walker.slope.toFixed(1)}°`);
+    renderer.render(scene, camera);
+  }
+  requestAnimationFrame(frame);
+}
+
+// --- The panel -------------------------------------------------------------
+
+function render() {
+  document.getElementById("state").textContent =
+    `Refine Plan Revision ${state.revision} · ${state.state} · on Blockout Revision ${state.blockout_revision}`;
+  buildWorld();
+  renderChecks();
+  renderPlan();
+  renderActs();
+}
+
+function renderChecks() {
+  const rows = state.checks.map((c) => {
+    const waived = c.check in state.waivers;
+    const mark = c.passed ? ["pass", "pass"] : waived ? ["waived", "waived"] : ["miss", "MISS"];
+    const goal = c.at_most ? `≤ ${amount(c.target, c.unit)}` : `${amount(c.target, c.unit)} ±${Math.round(c.tolerance * 100)}%`;
+    return h("tr", {}, h("td", { class: mark[0] }, mark[1]), h("td", {}, c.check),
+      h("td", {}, amount(c.measured, c.unit)), h("td", { class: "na" }, goal));
+  });
+  for (const r of state.blockout.readings.filter((r) => r.measure === null)) {
+    rows.push(h("tr", {}, h("td", { class: "na" }, "—"), h("td", {}, `reading ${r.phrase}`),
+      h("td", { colspan: 2, class: "na" }, `not measurable: ${r.meaning}`)));
+  }
+  document.getElementById("checks").replaceChildren(
+    h("tr", {}, h("td", { class: "na" }, ""), h("td", { class: "na" }, "Check"), h("td", { class: "na" }, "measured"), h("td", { class: "na" }, "target")),
+    ...rows);
+}
+
+function renderPlan() {
+  const disabled = !editable();
+  document.getElementById("plan").replaceChildren(...state.refine_plan.surfaces.map((s) => {
+    const field = (name, attrs) => h("input", { name, value: s[name], disabled, ...attrs });
+    const inputs = {
+      slope_profile: h("select", { name: "slope_profile", disabled },
+        ...["linear", "smooth", "steep"].map((p) => h("option", { value: p, selected: p === s.slope_profile }, p))),
+      falloff_width: field("falloff_width", { type: "number", min: 0, step: 1 }),
+      roughness: field("roughness", { type: "number", min: 0, step: 0.1 }),
+      seed: field("seed", { type: "number", step: 1 }),
+      vegetation_density: field("vegetation_density", { type: "number", min: 0, max: 1, step: 0.05 }),
+    };
+    const labels = { slope_profile: "Slope profile", falloff_width: "Falloff width (m)", roughness: "Roughness (m)", seed: "Seed", vegetation_density: "Vegetation (0–1)" };
+    const apply = () => {
+      const change = { surface: s.surface };
+      for (const [name, input] of Object.entries(inputs)) {
+        const value = name === "slope_profile" ? input.value : name === "seed" ? parseInt(input.value, 10) : Number(input.value);
+        if (value !== s[name]) change[name] = value;
+      }
+      if (Object.keys(change).length > 1) act("/api/edit", { revision: state.revision, change });
+    };
+    return h("div", { class: "surface" },
+      h("div", {}, h("strong", {}, s.surface)), reason(s.reason),
+      h("div", { class: "grid" }, ...Object.entries(inputs).map(([name, input]) => h("div", {}, h("label", {}, labels[name]), input))),
+      h("button", { style: "margin-top:8px", disabled, onclick: apply }, `Apply to ${s.surface}`));
+  }));
+}
+
+function renderActs() {
+  const box = document.getElementById("acts");
+  const title = h("h2", {}, "Approve or reject");
+  if (!editable()) {
+    box.replaceChildren(title, h("p", { class: "na" }, `Refine Plan Revision ${state.revision} is ${state.state}.`));
+    return;
+  }
+  const missed = state.checks.filter((c) => !c.passed);
+  const waivers = missed.map((c) => [c.check, h("input", { placeholder: "why this miss is accepted on the Terrain" })]);
+  const note = h("textarea", { placeholder: "what was wrong" });
+  box.replaceChildren(title,
+    ...(missed.length ? [h("p", { class: "na" }, "Each miss on the Terrain needs its own Waiver; Checkpoint #1's don't carry over.")] : []),
+    ...waivers.map(([check, input]) => h("div", {}, h("label", {}, `Waiver for ${check}`), input)),
+    h("button", {
+      class: "primary", style: "margin-top:8px",
+      onclick: () => act("/api/approve", { revision: state.revision, waivers: Object.fromEntries(waivers.map(([c, i]) => [c, i.value.trim()]).filter(([, v]) => v)) }),
+    }, `Approve Refine Plan Revision ${state.revision}`),
+    h("label", {}, "Reject with a note"), note,
+    h("button", { class: "danger", style: "margin-top:8px", onclick: () => act("/api/reject", { revision: state.revision, note: note.value }) },
+      `Reject Refine Plan Revision ${state.revision}`));
+}
+
+api("/api/state").then((s) => {
+  state = s;
+  placeWalker();
+  resize();
+  render();
+  requestAnimationFrame(frame);
+}).catch((e) => showError(e.message));
+</script>
+</body>
+</html>
