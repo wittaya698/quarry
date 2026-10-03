@@ -11,6 +11,8 @@ from quarry.surface import surface
 SPACING = 2.0  # metres between height samples
 _CELL = 16.0  # metres per roughness noise cell
 _MASK = 0xFFFFFFFF
+_PAD_MARGIN = 1.5 * SPACING  # flat beyond the Pad's edge, so interpolation inside it stays flat
+_PAD_BLEND = 6.0  # metres over which a flattened Pad eases back into the natural ground
 
 
 @dataclass(frozen=True)
@@ -45,8 +47,9 @@ class Terrain:
 def build_terrain(brief, blockout_revision, refine_plan_revision):
     width, depth = brief.footprint
     columns, rows = round(width / SPACING) + 1, round(depth / SPACING) + 1
-    shape = surface(blockout_revision.blockout)
+    shape = surface(blockout_revision.blockout, refine_plan_revision.plan)
     refinements = {s.surface: s for s in refine_plan_revision.plan.surfaces}
+    pads = [(l.position, l.pad_radius + _PAD_MARGIN, shape.height(*l.position)) for l in blockout_revision.blockout.landmarks]
     heights, vegetation = [], []
     for r in range(rows):
         height_row, vegetation_row = [], []
@@ -54,7 +57,8 @@ def build_terrain(brief, blockout_revision, refine_plan_revision):
             x, y = c * SPACING, r * SPACING
             # Surface values come from the topmost Zone alone, never a blend.
             own = refinements[shape.owner(x, y)]
-            height_row.append(shape.height(x, y) + own.roughness * _noise(own.seed, x, y))
+            height = shape.height(x, y) + own.roughness * _noise(own.seed, x, y)
+            height_row.append(_flatten_pads(pads, x, y, height))
             vegetation_row.append(own.vegetation_density)
         heights.append(tuple(height_row))
         vegetation.append(tuple(vegetation_row))
@@ -62,6 +66,17 @@ def build_terrain(brief, blockout_revision, refine_plan_revision):
     return Terrain(
         (width, depth), SPACING, heights, vegetation, blockout_revision.number, refine_plan_revision.number
     )
+
+
+def _flatten_pads(pads, x, y, height):
+    """Hold each Pad level at its centre's Surface height, easing out beyond it."""
+    for (px, py), flat_radius, level in pads:
+        d = ((x - px) ** 2 + (y - py) ** 2) ** 0.5
+        if d <= flat_radius:
+            height = level
+        elif d < flat_radius + _PAD_BLEND:
+            height = _lerp(level, height, _smooth((d - flat_radius) / _PAD_BLEND))
+    return height
 
 
 def _noise(seed, x, y):

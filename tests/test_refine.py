@@ -183,3 +183,19 @@ def test_terrain_stands_on_the_blockout_surface_with_each_samples_own_refinement
     assert terrain.vegetation[row][column] == refinements["rise"].vegetation_density
     assert terrain.vegetation[0][0] == refinements["ground"].vegetation_density
     assert refinements["rise"].vegetation_density != refinements["ground"].vegetation_density
+
+
+def test_terrain_is_the_refined_surface_where_nothing_else_applies(approved):
+    approved.draft_refine_plan(FakeAgent())
+    approved.edit_refine_plan(1, {"surface": "ground", "roughness": 0.0}, by=ALICE)
+    approved.edit_refine_plan(2, {"surface": "rise", "roughness": 0.0, "falloff_width": 30.0}, by=ALICE)
+    blockout, plan = approved.current_revision.blockout, approved.current_refine_plan.plan
+
+    terrain = approved.terrain()
+
+    refined = surface(blockout, plan)
+    column = round(100 / terrain.spacing)  # the line x = 100 m runs through the rise, clear of both Pads
+    for row, heights in enumerate(terrain.heights):
+        y = row * terrain.spacing
+        assert heights[column] == pytest.approx(refined.height(100, y))
+    assert refined.height(100, 100 + 25) < surface(blockout).height(100, 100 + 25)  # the falloff softens the rim

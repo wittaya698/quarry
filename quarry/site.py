@@ -14,7 +14,7 @@ from pathlib import Path
 from quarry.blockout import Blockout
 from quarry.brief import Brief, brief_check
 from quarry.checks import run_checks
-from quarry.edits import apply_edit
+from quarry.edits import apply_edit, apply_refine_edit
 from quarry.export import export_glb, verify_export
 from quarry.identity import Human
 from quarry.refine import RefinePlan
@@ -38,6 +38,7 @@ class RefinePlanRevision:
     number: int
     plan: RefinePlan
     revived_from: int | None = None
+    edited_by: Human | None = None
 
 
 @dataclass(frozen=True)
@@ -158,15 +159,8 @@ class Site:
         self._append(self._blockout, agent.draft_blockout(self.brief))
 
     def edit(self, number, change, by):
-        """A human edit of the current Revision: a new Revision, no Agent call."""
-        _require_human(by, "edit")
-        self._blockout.refuse_revision()
-        self._blockout.revision(number)
-        current = self.current_revision.number
-        if number != current:
-            raise Refused(f"cannot edit Revision {number}: Revision {current} is current")
-        blockout = apply_edit(self.revision(number).blockout, change)
-        self._append(self._blockout, blockout, edited_by=by)
+        """A human edit of the current Blockout Revision: a new Revision, no Agent call."""
+        self._edit(self._blockout, number, by, lambda r: apply_edit(r.blockout, change))
 
     def revive(self, number):
         self._append(self._blockout, self.revision(number).blockout, revived_from=number)
@@ -209,6 +203,10 @@ class Site:
         """The latest Refine Plan Revision, or None before the first."""
         return self._refine.current
 
+    def edit_refine_plan(self, number, change, by):
+        """A human edit of the current Refine Plan Revision; the Terrain rebuilds from it."""
+        self._edit(self._refine, number, by, lambda r: apply_refine_edit(r.plan, change))
+
     def revive_refine_plan(self, number):
         self._append(self._refine, self.refine_plan(number).plan, revived_from=number)
 
@@ -223,9 +221,13 @@ class Site:
     def refine_plan_rejections(self):
         return self._refine.rejections
 
+    def terrain_checks(self):
+        """Every Blockout Check again, measured on the Terrain against the same targets."""
+        blockout = self.revision(self.approval.revision).blockout
+        return run_checks(self.brief, blockout, self.terrain())
+
     def approve_refine_plan(self, number, by, waivers=None):
-        # Checks on Terrain arrive with issue 05; until then nothing can miss here.
-        self._approve(self._refine, number, by, waivers, lambda: [])
+        self._approve(self._refine, number, by, waivers, self.terrain_checks)
 
     def reject_refine_plan(self, number, by, note):
         self._reject(self._refine, number, by, note)
@@ -255,6 +257,15 @@ class Site:
         pending.replace(path)
 
     # --- Human acts, the same at both Checkpoints -------------------------
+
+    def _edit(self, stage, number, by, apply):
+        _require_human(by, "edit")
+        stage.refuse_revision()
+        revision = stage.revision(number)
+        current = stage.current.number
+        if number != current:
+            raise Refused(f"cannot edit Revision {number}: Revision {current} is current")
+        self._append(stage, apply(revision), edited_by=by)
 
     def _approve(self, stage, number, by, waivers, checks):
         _require_human(by, "approve")

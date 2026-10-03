@@ -4,7 +4,7 @@ A terrain-authoring tool for game developers. An AI agent drafts the terrain, an
 
 You write a **Brief**: a footprint, the places you care about, how long it should take to walk between them, and a mood. The AI drafts a coarse **Blockout** with a **Reason** for each choice. Quarry then measures that Blockout against your targets rather than taking the AI's word for it. Nothing moves on until you approve one exact **Revision**.
 
-> **Status: early.** The skeleton runs end to end from the CLI with a fake Agent: Brief → Brief Check → Blockout (Zones, Pads, Readings) → all Blockout Checks → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. Checkpoint #1 has a browser page for viewing, editing and approving the Blockout. The Checks can already measure Terrain, but Checkpoint #2 doesn't run them yet and has no page, and the Export holds only the terrain mesh and its collision. The Claude-backed Agent is planned. See [the roadmap](#roadmap).
+> **Status: early.** The skeleton runs end to end from the CLI with a fake Agent: Brief → Brief Check → Blockout (Zones, Pads, Readings) → all Blockout Checks → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. Both Checkpoints have a browser page: a top-down Blockout editor at #1, and a first-person walk over the Terrain at #2, where every Check runs again on the real ground. The Export holds only the terrain mesh and its collision so far. The Claude-backed Agent is planned. See [the roadmap](#roadmap).
 
 ## Quick start
 
@@ -45,12 +45,20 @@ The page shows the Blockout top-down, with Zones (Combine Mode and Stacking Orde
 - Each edit is a new Revision. The Checks re-measure straight away, with no Agent call, and the edited element's Reason becomes yours.
 - Approve the Revision named on the button (with a Waiver for each missed Check), or reject it with a note.
 
-Or approve from the terminal, waiving the miss, then draft, approve and export the Refine Plan:
+Once the Blockout is approved and a Refine Plan is drafted (`quarry refine island`), `quarry open island` shows Checkpoint #2 instead:
+- Walk the Terrain in first person at the Brief's Walk Speed. Click the view, then use W A S D and the mouse. Anything steeper than the Max Walkable Slope blocks you, and O toggles an overview.
+- Every Check is shown again, measured on the Terrain.
+- Each surface's Refine Plan values and Reasons are listed next to the view. Editing one makes a new Revision and rebuilds the Terrain in well under a second.
+- Approve, with fresh Waivers for the Terrain's misses, or reject with a note.
+
+The walk preview loads three.js from cdn.jsdelivr.net, so it needs internet access.
+
+Or do it all from the terminal, waiving the miss at each Checkpoint:
 
 ```sh
 uv run quarry approve island 1 --waive "walk spawn→village=the village can be farther"
 uv run quarry refine island
-uv run quarry approve island 1
+uv run quarry approve island 1 --waive "walk spawn→village=still farther on the Terrain"
 uv run quarry export island island.glb
 ```
 
@@ -89,7 +97,7 @@ exported island.glb from Blockout Revision 1 and Refine Plan Revision 1; collisi
 | `quarry new SITE --from OTHER_SITE`              | Create a variant Site from a copy of another Site's Brief, with its own history |
 | `quarry draft SITE`                              | Ask the Agent for a new Blockout Revision                    |
 | `quarry refine SITE`                             | Ask the Agent for a new Refine Plan Revision (needs an approved Blockout) |
-| `quarry open SITE [--port N] [--no-browser]`    | Serve the Checkpoint #1 page on 127.0.0.1 and open it; Ctrl-C stops it |
+| `quarry open SITE [--port N] [--no-browser]`    | Serve the current Checkpoint's page on 127.0.0.1 and open it; Ctrl-C stops it |
 | `quarry status SITE`                             | Both Checkpoints' state, Revisions and Check results, or Brief Check problems before the first Draft |
 | `quarry show SITE N`                             | Revision N of the Draft at the current Checkpoint (Landmarks and Pads, Paths, Zones in Stacking Order, Readings), each choice with its Reason |
 | `quarry approve SITE N [--waive "CHECK=WHY"]...` | Approve Revision N at the current Checkpoint; every missed Check needs a Waiver |
@@ -103,7 +111,7 @@ A Site is a directory containing `brief.json` and `history.jsonl`. The history i
 
 ## Checks
 
-Checks measure a surface: the Blockout's coarse **Surface** at Checkpoint #1, and the same code can measure Terrain.
+Checks measure a surface: the Blockout's coarse **Surface** at Checkpoint #1, then the built **Terrain** at Checkpoint #2, against the same targets and under the same names. A Path that passed on the Blockout but got steeper in refining misses at #2.
 
 | Check            | Passes when                                                                   |
 | ---------------- | ----------------------------------------------------------------------------- |
@@ -126,6 +134,9 @@ The Brief Check flags a Walk Target only when no route could meet it: one longer
 - **Rejections need a note** and keep the Revision. A rejected Revision stays viewable and can be revived.
 - **Nothing is built on an unapproved Blockout.** A Refine Plan is refused until the Blockout is approved, and the Refine Plan passes its own Checkpoint under the same rules.
 - **One definition of height.** Zones combine in Stacking Order by their Combine Mode (`add`, `max` or `replace`). Each point takes its surface values, such as roughness and vegetation, from its topmost Zone alone, never from a blend. Checks and the Terrain Builder share this one definition.
+- **Each Checkpoint gets its own Waivers.** Approving the Refine Plan needs a Waiver for every Check that misses on the Terrain, even one that was waived at Checkpoint #1.
+- **Pads are flattened.** The Terrain Builder holds every Pad level at its centre's height and eases it back into the ground beyond. The Pad Check then measures it on the Terrain.
+- **The Refine Plan shapes edges, and nothing else of the Blockout's.** Each Zone's edge eases in over its `falloff_width`, centred on the rim so the Zone keeps its size, following its `slope_profile` (`linear`, `smooth` or `steep`). Refine Plan edits can change only slope profile, falloff width, roughness, seed and vegetation density, and each edit makes a new Revision.
 - **Terrain is built by code, not the AI.** The same Blockout and Refine Plan always give byte-identical Terrain, whose only randomness is the Refine Plan's seed. Terrain names the Blockout Revision and Refine Plan Revision it came from. See [ADR-0001](docs/adr/0001-approved-blockout-is-the-contract.md).
 - **Export is verified, not trusted.** Export is refused until the Refine Plan is approved. The `.glb` names its collision mesh `terrain-colonly`, so Godot 4 builds a collision body on import. Each Export is re-imported, and its collision is re-measured against the Terrain before the file is kept. See [ADR-0002](docs/adr/0002-standalone-core-browser-checkpoints-glb-export.md).
 
@@ -140,11 +151,12 @@ Tests use only the public interfaces, and they never call a live LLM.
 ```
 quarry/
   site.py       Site: Brief + append-only history; Checkpoint rules for both Drafts
-  edits.py      Human edits: one change to a Blockout → the next Revision
-  page.py       Checkpoint #1 server (127.0.0.1, token-guarded), over one Site
+  edits.py      Human edits: one change to a Blockout or Refine Plan → the next Revision
+  page.py       Checkpoint server (127.0.0.1, token-guarded) for whichever Checkpoint a Site is at
   checkpoint1.html  The Checkpoint #1 page: top-down SVG editor, plain JavaScript
+  checkpoint2.html  The Checkpoint #2 page: first-person Terrain walk (three.js) and Refine Plan editor
   checks.py     Checks: walk, slope, Pad and Reading Checks, measured on any surface
-  surface.py    Surface: Ground + Zones → height and topmost Zone at any point
+  surface.py    Surface: Ground + Zones (+ Refine Plan edges) → height and topmost Zone at any point
   agent.py      Agent port and the deterministic FakeAgent
   brief.py      Brief and Walk Targets, loaded from JSON; the Brief Check
   blockout.py   Blockout: Landmarks with Pads, Paths, Zones and Readings, each with a Reason
@@ -174,7 +186,7 @@ The MVP is planned as ten vertical slices in [.scratch/quarry-mvp/issues/](.scra
 2. ✅ Tracer: Refine Plan → Terrain → `.glb`
 3. ✅ All Blockout Checks: overlapping Zones, slope-aware walking, Brief Check, Readings, Pads
 4. ✅ Checkpoint #1 page: a top-down Blockout view in the browser, with edits and human acts
-5. Checkpoint #2: Checks on Terrain, Waivers per Checkpoint, and a walkable preview
+5. ✅ Checkpoint #2: Checks on Terrain, Waivers per Checkpoint, and a walkable preview
 6. Live Agent: a Claude-backed adapter with a validation layer
 7. Draft quality review (human)
 8. Going back: Reopen, carry-forward and Edit Requests
