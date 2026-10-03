@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quarry · Checkpoint #1</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #ffffff; --ink: #1f2328; --muted: #6a6f76; --line: #d9d7d0;
+    --pass: #1a7f37; --miss: #c62828; --waived: #9a6700; --ai: #6a6f76; --human: #0b62c4;
+    --zone: #8a6d3b; --path: #3b4a5a; --pad: #0b62c4; --ground: #e9e6dc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181b; --panel: #1e2125; --ink: #e6e6e3; --muted: #9aa0a6; --line: #33373c;
+      --pass: #4ac26b; --miss: #ff6b6b; --waived: #d4a72c; --ai: #9aa0a6; --human: #58a6ff;
+      --zone: #c9a66b; --path: #b8c4d0; --pad: #58a6ff; --ground: #23262a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, sans-serif; }
+  header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; }
+  header .state { color: var(--muted); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; padding: 16px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .map { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  svg { width: 100%; height: auto; display: block; touch-action: none; user-select: none; }
+  .hint { color: var(--muted); font-size: 12px; margin: 6px 4px 0; }
+  aside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td { padding: 3px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+  tr:first-child td { border-top: 0; }
+  .pass { color: var(--pass); font-weight: 600; }
+  .miss { color: var(--miss); font-weight: 600; }
+  .waived { color: var(--waived); font-weight: 600; }
+  .na { color: var(--muted); }
+  .reason { color: var(--muted); font-size: 12px; }
+  .reason.human { color: var(--human); }
+  .element { padding: 6px 0; border-top: 1px solid var(--line); cursor: pointer; }
+  .element:first-child { border-top: 0; }
+  .element.selected { background: color-mix(in srgb, var(--human) 10%, transparent); }
+  label { display: block; margin: 6px 0 2px; font-size: 12px; color: var(--muted); }
+  input, select, textarea, button { font: inherit; color: inherit; }
+  input, select, textarea { width: 100%; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+  textarea { min-height: 56px; }
+  button { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  button.primary { background: var(--pass); color: #fff; border-color: var(--pass); }
+  button.danger { background: var(--miss); color: #fff; border-color: var(--miss); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; align-items: end; }
+  .row > * { flex: 1; }
+  .error { background: color-mix(in srgb, var(--miss) 15%, var(--panel)); border-color: var(--miss); display: none; }
+  .error.shown { display: block; }
+  svg text { font-size: 11px; fill: var(--ink); pointer-events: none; }
+  .zone-body { cursor: move; }
+  .zone-rim { cursor: ew-resize; }
+  .landmark { cursor: move; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Quarry · Checkpoint #1 · Blockout</h1>
+  <span class="state" id="state">loading…</span>
+</header>
+<main>
+  <div class="map">
+    <svg id="map" xmlns="http://www.w3.org/2000/svg"></svg>
+    <p class="hint">Drag a Landmark or Zone to move it, and a Zone's rim handle to resize it. Each release makes a new Revision and re-runs the Checks. ★ marks a Landmark the AI chose.</p>
+  </div>
+  <aside>
+    <section class="error" id="error"></section>
+    <section><h2>Checks</h2><table id="checks"></table></section>
+    <section id="inspector"><h2>Selected</h2><p class="na">Click an element on the map or in the list.</p></section>
+    <section><h2>Elements and their Reasons</h2><div id="elements"></div></section>
+    <section id="acts"><h2>Approve or reject</h2></section>
+  </aside>
+</main>
+<script>
+const token = new URLSearchParams(location.search).get("token");
+const svgNS = "http://www.w3.org/2000/svg";
+let state = null;
+let selected = null; // {kind, key}
+
+async function api(route, body) {
+  const options = body === undefined ? {} : { method: "POST", body: JSON.stringify(body) };
+  const response = await fetch(`${route}?token=${encodeURIComponent(token)}`, options);
+  const reply = await response.json();
+  if (!response.ok) throw new Error(reply.error);
+  return reply;
+}
+
+async function act(route, body) {
+  try {
+    state = await api(route, body);
+    showError(null);
+  } catch (error) {
+    showError(error.message);
+    state = await api("/api/state");
+  }
+  render();
+}
+
+function showError(message) {
+  const box = document.getElementById("error");
+  box.textContent = message || "";
+  box.classList.toggle("shown", Boolean(message));
+}
+
+const editable = () => state.state === "awaiting review";
+const yOf = (y) => state.footprint[1] - y; // north up
+const el = (name, attrs, parent) => {
+  const node = document.createElementNS(svgNS, name);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  if (parent) parent.appendChild(node);
+  return node;
+};
+const h = (tag, attrs = {}, ...children) => {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else if (v !== false && v !== null && v !== undefined) node.setAttribute(k, v === true ? "" : v);
+  }
+  for (const child of children.flat()) node.append(child);
+  return node;
+};
+const reason = (r) => h("div", { class: `reason ${r.author}` }, `${r.author === "human" ? "you" : "AI"}: ${r.text}`);
+
+function amount(value, unit) {
+  if (unit === "s") {
+    const total = Math.round(value);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+  }
+  if (unit === "°") return `${value.toFixed(1)}°`;
+  return `${value.toFixed(0)} m`;
+}
+
+function render() {
+  const { blockout } = state;
+  document.getElementById("state").textContent = `Revision ${state.revision} · ${state.state}`;
+  renderMap(blockout);
+  renderChecks(blockout);
+  renderElements(blockout);
+  renderInspector(blockout);
+  renderActs();
+}
+
+function renderMap(blockout) {
+  const svg = document.getElementById("map");
+  const [w, d] = state.footprint;
+  svg.setAttribute("viewBox", `-10 -10 ${w + 20} ${d + 20}`);
+  svg.replaceChildren();
+  el("rect", { x: 0, y: 0, width: w, height: d, fill: "var(--ground)", stroke: "var(--line)" }, svg);
+
+  blockout.zones.forEach((zone, i) => {
+    const [cx, cy] = zone.center;
+    const isSelected = selected && selected.kind === "zone" && selected.key === zone.name;
+    const opacity = Math.min(0.45, 0.12 + Math.abs(zone.height) / 40);
+    const fill = zone.height < 0 ? "#3d7bd9" : "var(--zone)";
+    const body = el("circle", {
+      cx, cy: yOf(cy), r: zone.radius, fill, "fill-opacity": opacity,
+      stroke: isSelected ? "var(--human)" : fill, "stroke-width": isSelected ? 2 : 1,
+      "stroke-dasharray": zone.profile === "flat" ? "" : "4 3", class: "zone-body",
+    }, svg);
+    el("text", { x: cx, y: yOf(cy) - 4, "text-anchor": "middle" }, svg).textContent =
+      `${i + 1} · ${zone.name}`;
+    el("text", { x: cx, y: yOf(cy) + 10, "text-anchor": "middle" }, svg).textContent =
+      `${zone.combine} ${zone.height >= 0 ? "+" : ""}${zone.height.toFixed(1)} m`;
+    const rim = el("circle", { cx: cx + zone.radius, cy: yOf(cy), r: 4, fill: "var(--panel)", stroke: fill, class: "zone-rim" }, svg);
+    draggable(body, { kind: "zone", key: zone.name }, (x, y) => {
+      body.setAttribute("cx", x); body.setAttribute("cy", yOf(y));
+      rim.setAttribute("cx", x + zone.radius); rim.setAttribute("cy", yOf(y));
+    }, (x, y) => act("/api/edit", { revision: state.revision, change: { zone: zone.name, center: [round(x), round(y)] } }));
+    draggable(rim, { kind: "zone", key: zone.name }, (x) => {
+      const r = Math.max(2, Math.abs(x - cx));
+      body.setAttribute("r", r); rim.setAttribute("cx", cx + r);
+    }, (x) => act("/api/edit", { revision: state.revision, change: { zone: zone.name, radius: round(Math.max(2, Math.abs(x - cx))) } }));
+  });
+
+  for (const path of blockout.paths) {
+    el("polyline", {
+      points: path.points.map(([x, y]) => `${x},${yOf(y)}`).join(" "), fill: "none",
+      stroke: "var(--path)", "stroke-width": 2, "stroke-dasharray": path.decorative ? "6 4" : "",
+      "stroke-linecap": "round",
+    }, svg);
+  }
+
+  for (const landmark of blockout.landmarks) {
+    const [x, y] = landmark.position;
+    const isSelected = selected && selected.kind === "landmark" && selected.key === landmark.name;
+    const group = el("g", { class: "landmark" }, svg);
+    el("circle", { cx: x, cy: yOf(y), r: landmark.pad_radius, fill: "none", stroke: "var(--pad)", "stroke-dasharray": "3 2" }, group);
+    el("circle", { cx: x, cy: yOf(y), r: isSelected ? 5 : 4, fill: isSelected ? "var(--human)" : "var(--ink)" }, group);
+    el("text", { x: x + landmark.pad_radius + 3, y: yOf(y) + 4 }, group).textContent =
+      `${landmark.ai_chosen ? "★ " : ""}${landmark.name}`;
+    draggable(group, { kind: "landmark", key: landmark.name }, (nx, ny) => {
+      group.setAttribute("transform", `translate(${nx - x} ${yOf(ny) - yOf(y)})`);
+    }, (nx, ny) => act("/api/edit", { revision: state.revision, change: { move_landmark: landmark.name, to: [round(nx), round(ny)] } }));
+  }
+}
+
+const round = (v) => Math.round(v * 10) / 10;
+
+function draggable(node, target, onMove, onDrop) {
+  node.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+    selected = target;
+    if (!editable()) { render(); return; }
+    const svg = document.getElementById("map");
+    const toSite = (e) => {
+      const point = new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse());
+      return [point.x, state.footprint[1] - point.y];
+    };
+    const start = toSite(event);
+    let moved = false;
+    node.setPointerCapture(event.pointerId);
+    const move = (e) => {
+      const [x, y] = toSite(e);
+      if (Math.hypot(x - start[0], y - start[1]) > 0.5) moved = true;
+      if (moved) onMove(x, y);
+    };
+    const up = (e) => {
+      node.removeEventListener("pointermove", move);
+      node.removeEventListener("pointerup", up);
+      if (moved) onDrop(...toSite(e));
+      else render();
+    };
+    node.addEventListener("pointermove", move);
+    node.addEventListener("pointerup", up);
+  });
+}
+
+function renderChecks(blockout) {
+  const rows = state.checks.map((c) => {
+    const waived = state.waivers && c.check in state.waivers;
+    const mark = c.passed ? ["pass", "pass"] : waived ? ["waived", "waived"] : ["miss", "MISS"];
+    const goal = c.at_most ? `≤ ${amount(c.target, c.unit)}` : `${amount(c.target, c.unit)} ±${Math.round(c.tolerance * 100)}%`;
+    return h("tr", {}, h("td", { class: mark[0] }, mark[1]), h("td", {}, c.check),
+      h("td", {}, amount(c.measured, c.unit)), h("td", { class: "na" }, goal));
+  });
+  for (const r of blockout.readings.filter((r) => r.measure === null)) {
+    rows.push(h("tr", {}, h("td", { class: "na" }, "—"), h("td", {}, `reading ${r.phrase}`),
+      h("td", { colspan: 2, class: "na" }, `not measurable: ${r.meaning}`)));
+  }
+  document.getElementById("checks").replaceChildren(
+    h("tr", {}, h("td", { class: "na" }, ""), h("td", { class: "na" }, "Check"), h("td", { class: "na" }, "measured"), h("td", { class: "na" }, "target")),
+    ...rows);
+}
+
+function renderElements(blockout) {
+  const item = (kind, key, title, r) => h("div", {
+    class: `element${selected && selected.kind === kind && selected.key === key ? " selected" : ""}`,
+    onclick: () => { selected = { kind, key }; render(); },
+  }, h("div", {}, title), reason(r));
+  document.getElementById("elements").replaceChildren(
+    ...blockout.landmarks.map((l) => item("landmark", l.name,
+      `Landmark ${l.ai_chosen ? "★ " : ""}${l.name} · Pad ${l.pad_radius} m${l.ai_chosen ? " · AI-chosen" : ""}`, l.reason)),
+    ...blockout.paths.map((p) => item("path", `${p.start}→${p.end}`,
+      `Path ${p.start}→${p.end}${p.decorative ? " · decorative" : ""}`, p.reason)),
+    ...blockout.zones.map((z, i) => item("zone", z.name,
+      `Zone ${i + 1} ${z.name} · ${z.profile} ${z.height} m · r ${z.radius.toFixed(0)} m · ${z.combine}`, z.reason)),
+    ...blockout.readings.map((r) => item("reading", r.phrase, `Reading “${r.phrase}” → ${r.meaning}`, r.reason)),
+  );
+}
+
+function renderInspector(blockout) {
+  const box = document.getElementById("inspector");
+  const title = h("h2", {}, "Selected");
+  if (!selected) { box.replaceChildren(title, h("p", { class: "na" }, "Click an element on the map or in the list.")); return; }
+  const disabled = !editable();
+  const edit = (change) => act("/api/edit", { revision: state.revision, change });
+
+  if (selected.kind === "zone") {
+    const zones = blockout.zones;
+    const index = zones.findIndex((z) => z.name === selected.key);
+    const zone = zones[index];
+    if (!zone) { selected = null; return renderInspector(blockout); }
+    const height = h("input", { type: "number", step: "0.5", value: zone.height, disabled });
+    const combine = h("select", { disabled }, ...["add", "max", "replace"].map((m) => h("option", { value: m, selected: m === zone.combine }, m)));
+    const restack = (to) => {
+      const order = zones.map((z) => z.name);
+      order.splice(index, 1); order.splice(to, 0, zone.name);
+      edit({ stack: order });
+    };
+    box.replaceChildren(title,
+      h("div", {}, `Zone ${zone.name} · Stacking Order ${index + 1} of ${zones.length}`), reason(zone.reason),
+      h("div", { class: "row" },
+        h("div", {}, h("label", {}, "Height (m)"), height),
+        h("div", {}, h("label", {}, "Combine Mode"), combine)),
+      h("div", { class: "row", style: "margin-top:8px" },
+        h("button", { disabled, onclick: () => edit({ zone: zone.name, height: Number(height.value), combine: combine.value }) }, "Apply"),
+        h("button", { disabled: disabled || index === 0, onclick: () => restack(index - 1) }, "Stack lower"),
+        h("button", { disabled: disabled || index === zones.length - 1, onclick: () => restack(index + 1) }, "Stack higher")));
+  } else if (selected.kind === "reading") {
+    const reading = blockout.readings.find((r) => r.phrase === selected.key);
+    const parts = [title, h("div", {}, `“${reading.phrase}” → ${reading.meaning}`), reason(reading.reason)];
+    if (reading.measure === null) {
+      parts.push(h("p", { class: "na" }, "Not measurable, so it is shown without pass or miss."));
+    } else {
+      const limit = h("input", { type: "number", step: "0.5", value: reading.limit, disabled });
+      parts.push(h("label", {}, reading.measure === "max_slope" ? "Limit (°)" : "Limit (m)"), limit,
+        h("button", { style: "margin-top:8px", disabled, onclick: () => edit({ reading: reading.phrase, limit: Number(limit.value) }) }, "Apply"));
+    }
+    box.replaceChildren(...parts);
+  } else if (selected.kind === "landmark") {
+    const l = blockout.landmarks.find((l) => l.name === selected.key);
+    box.replaceChildren(title, h("div", {}, `Landmark ${l.ai_chosen ? "★ " : ""}${l.name} at (${l.position.map((v) => v.toFixed(0)).join(", ")})`),
+      reason(l.reason), h("p", { class: "na" }, `Pad radius ${l.pad_radius} m. Drag it on the map to move it.`));
+  } else {
+    const p = blockout.paths.find((p) => `${p.start}→${p.end}` === selected.key);
+    box.replaceChildren(title, h("div", {}, `Path ${selected.key}${p.decorative ? " · decorative, not measured" : ""}`), reason(p.reason));
+  }
+}
+
+function renderActs() {
+  const box = document.getElementById("acts");
+  const title = h("h2", {}, "Approve or reject");
+  if (!editable()) {
+    box.replaceChildren(title, h("p", { class: "na" }, `Revision ${state.revision} is ${state.state}.`));
+    return;
+  }
+  const missed = state.checks.filter((c) => !c.passed);
+  const waivers = missed.map((c) => [c.check, h("input", { placeholder: "why this miss is accepted" })]);
+  const note = h("textarea", { placeholder: "what was wrong" });
+  box.replaceChildren(title,
+    ...(missed.length ? [h("p", { class: "na" }, "Each missed Check needs a Waiver.")] : []),
+    ...waivers.map(([check, input]) => h("div", {}, h("label", {}, `Waiver for ${check}`), input)),
+    h("button", {
+      class: "primary", style: "margin-top:8px",
+      onclick: () => act("/api/approve", { revision: state.revision, waivers: Object.fromEntries(waivers.map(([c, i]) => [c, i.value.trim()]).filter(([, v]) => v)) }),
+    }, `Approve Revision ${state.revision}`),
+    h("label", {}, "Reject with a note"), note,
+    h("button", { class: "danger", style: "margin-top:8px", onclick: () => act("/api/reject", { revision: state.revision, note: note.value }) },
+      `Reject Revision ${state.revision}`));
+}
+
+api("/api/state").then((s) => { state = s; render(); }).catch((e) => showError(e.message));
+</script>
+</body>
+</html>

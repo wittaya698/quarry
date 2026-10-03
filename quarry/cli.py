@@ -2,11 +2,13 @@
 import argparse
 import getpass
 import sys
+import webbrowser
 
 from quarry.agent import FakeAgent
 from quarry.brief import Brief
 from quarry.export import ExportError
 from quarry.identity import Automated, Human
+from quarry.page import serve
 from quarry.site import Refused, Site
 
 
@@ -38,6 +40,12 @@ def _parser():
     refine = commands.add_parser("refine", help="ask the Agent for a Refine Plan Draft")
     refine.add_argument("site")
     refine.set_defaults(run=_refine)
+
+    page = commands.add_parser("open", help="open the Checkpoint #1 page in the browser")
+    page.add_argument("site")
+    page.add_argument("--port", type=int, default=0, help="a fixed port; any free one by default")
+    page.add_argument("--no-browser", action="store_true", help="print the URL without opening it")
+    page.set_defaults(run=_open)
 
     status = commands.add_parser("status", help="Checkpoint, Revision and Check results")
     status.add_argument("site")
@@ -101,6 +109,23 @@ def _refine(args):
     site = Site.open(args.site)
     site.draft_refine_plan(FakeAgent())
     print(f"drafted Refine Plan Revision {site.current_refine_plan.number}")
+
+
+def _open(args):
+    site = Site.open(args.site)
+    if site.current_revision is None:
+        raise Refused(f"nothing to review yet; run `quarry draft {args.site}` first")
+    server = serve(args.site, _caller(), port=args.port)
+    print(f"Checkpoint #1 page for {args.site}: {server.url}")
+    print("acting as", server.caller.name, "· Ctrl-C to stop")
+    if not args.no_browser:
+        webbrowser.open(server.url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
 
 
 def _status(args):

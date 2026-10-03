@@ -14,13 +14,13 @@ The developer edits directly by dragging a Landmark, moving or resizing a Zone, 
 
 ## Acceptance criteria
 
-- [ ] The CLI opens the page for a Site; the Blockout renders within a few seconds
-- [ ] Every element shows its Reason; every Check shows target, measured value and pass/miss
-- [ ] Each edit creates a new Revision and re-runs the Checks without any Agent call
-- [ ] An edited element's Reason is replaced with a human-authored one
-- [ ] The Approve control names the Revision on screen and requires a Waiver per missed Check; Reject requires a note
-- [ ] Acts from the page are recorded with identity, and the core's refusal rules still apply
-- [ ] The page works with Blockouts from the fake Agent
+- [x] The CLI opens the page for a Site; the Blockout renders within a few seconds
+- [x] Every element shows its Reason; every Check shows target, measured value and pass/miss
+- [x] Each edit creates a new Revision and re-runs the Checks without any Agent call
+- [x] An edited element's Reason is replaced with a human-authored one
+- [x] The Approve control names the Revision on screen and requires a Waiver per missed Check; Reject requires a note
+- [x] Acts from the page are recorded with identity, and the core's refusal rules still apply
+- [x] The page works with Blockouts from the fake Agent
 
 ## Blocked by
 
