@@ -19,6 +19,7 @@ from quarry.export import export_glb, verify_export
 from quarry.identity import Human
 from quarry.refine import RefinePlan
 from quarry.terrain import build_terrain
+from quarry.validation import validate_blockout, validate_refine_plan
 
 
 class Refused(Exception):
@@ -156,7 +157,8 @@ class Site:
         problems = self.brief_problems()
         if problems:
             raise Refused(f"the Brief fails the Brief Check: {'; '.join(problems)}")
-        self._append(self._blockout, agent.draft_blockout(self.brief))
+        output = agent.draft_blockout(self.brief, rejection_note=_latest_note(self.rejections))
+        self._append(self._blockout, validate_blockout(self.brief, output))
 
     def edit(self, number, change, by):
         """A human edit of the current Blockout Revision: a new Revision, no Agent call."""
@@ -196,7 +198,9 @@ class Site:
         if self.approval is None:
             raise Refused("a Refine Plan needs an approved Blockout")
         blockout = self.revision(self.approval.revision).blockout
-        self._append(self._refine, agent.draft_refine_plan(self.brief, blockout))
+        note = _latest_note(self.refine_plan_rejections)
+        output = agent.draft_refine_plan(self.brief, blockout, rejection_note=note)
+        self._append(self._refine, validate_refine_plan(self.brief, blockout, output))
 
     @property
     def current_refine_plan(self):
@@ -308,6 +312,11 @@ class Site:
     def _apply(self, entry):
         stage = self._refine if entry.get("stage") == "refine_plan" else self._blockout
         stage.apply(entry)
+
+
+def _latest_note(rejections):
+    """The newest Rejection's note, which the next Draft is asked to answer."""
+    return rejections[-1].note if rejections else None
 
 
 def _require_human(caller, act):

@@ -4,12 +4,18 @@ import getpass
 import sys
 import webbrowser
 
+import anthropic
+
 from quarry.agent import FakeAgent
 from quarry.brief import Brief
+from quarry.claude_agent import AgentUnavailable, ClaudeAgent
 from quarry.export import ExportError
 from quarry.identity import Automated, Human
 from quarry.page import serve
 from quarry.site import Refused, Site
+from quarry.validation import InvalidDraft
+
+AGENTS = {"claude": ClaudeAgent, "fake": FakeAgent}
 
 
 def main(argv=None):
@@ -18,6 +24,12 @@ def main(argv=None):
         args.run(args)
     except (Refused, ExportError, FileExistsError, FileNotFoundError) as error:
         print(f"quarry: {error}", file=sys.stderr)
+        return 1
+    except InvalidDraft as error:
+        print(f"quarry: the Agent's Draft was refused, nothing recorded: {error}", file=sys.stderr)
+        return 1
+    except (AgentUnavailable, anthropic.AnthropicError) as error:
+        print(f"quarry: the Claude Agent could not draft: {error}", file=sys.stderr)
         return 1
     return 0
 
@@ -35,10 +47,12 @@ def _parser():
 
     draft = commands.add_parser("draft", help="ask the Agent for a Blockout Draft")
     draft.add_argument("site")
+    _agent_option(draft)
     draft.set_defaults(run=_draft)
 
     refine = commands.add_parser("refine", help="ask the Agent for a Refine Plan Draft")
     refine.add_argument("site")
+    _agent_option(refine)
     refine.set_defaults(run=_refine)
 
     page = commands.add_parser("open", help="open the current Checkpoint's page in the browser")
@@ -84,6 +98,13 @@ def _parser():
     return parser
 
 
+def _agent_option(command):
+    command.add_argument(
+        "--agent", choices=AGENTS, default="claude",
+        help="who drafts: Claude (needs ANTHROPIC_API_KEY) or the offline fake",
+    )
+
+
 def _caller():
     """The person at the keyboard. Without a terminal there is no person to
     name, so the core receives an Automated caller and refuses human acts."""
@@ -100,14 +121,14 @@ def _new(args):
 
 def _draft(args):
     site = Site.open(args.site)
-    site.draft(FakeAgent())
+    site.draft(AGENTS[args.agent]())
     print(f"drafted Revision {site.current_revision.number}")
     _print_checks(site.checks(), site.approval, site.current_revision.blockout)
 
 
 def _refine(args):
     site = Site.open(args.site)
-    site.draft_refine_plan(FakeAgent())
+    site.draft_refine_plan(AGENTS[args.agent]())
     print(f"drafted Refine Plan Revision {site.current_refine_plan.number}")
     _print_checks(site.terrain_checks(), site.refine_plan_approval, site.current_revision.blockout)
 

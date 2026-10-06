@@ -90,7 +90,7 @@ def _edit_reading(blockout, phrase, limit):
     return replace(blockout, readings=tuple(edited if r is reading else r for r in blockout.readings))
 
 
-_REFINE_VALUES = {
+REFINE_VALUES = {
     "slope_profile": lambda v: v in ("linear", "smooth", "steep"),
     "falloff_width": lambda v: isinstance(v, (int, float)) and v >= 0,
     "roughness": lambda v: isinstance(v, (int, float)) and v >= 0,
@@ -105,13 +105,13 @@ def apply_refine_edit(plan, change):
     values = {k: v for k, v in change.items() if k != "surface"}
     if name not in {s.surface for s in plan.surfaces}:
         raise EditError(f"no Refinement for a surface named {name}")
-    unknown = set(values) - set(_REFINE_VALUES)
+    unknown = set(values) - set(REFINE_VALUES)
     if unknown or not values:
         raise EditError(
-            f"a Refine Plan edit changes {', '.join(_REFINE_VALUES)}; got {', '.join(sorted(unknown)) or 'nothing'}"
+            f"a Refine Plan edit changes {', '.join(REFINE_VALUES)}; got {', '.join(sorted(unknown)) or 'nothing'}"
         )
     for key, value in values.items():
-        if not _REFINE_VALUES[key](value):
+        if not REFINE_VALUES[key](value):
             raise EditError(f"{value!r} is not a valid {key.replace('_', ' ')}")
     changed = ", ".join(f"{k.replace('_', ' ')} {v if isinstance(v, str) else format(v, 'g')}" for k, v in values.items())
     yours = Reason("human", f"{changed}, set by you")

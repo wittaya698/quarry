@@ -83,7 +83,7 @@ class Fixed:
         self.blockout = blockout
 
     def draft_blockout(self, brief, rejection_note=None):
-        return self.blockout
+        return self.blockout.to_dict()
 
 
 @pytest.fixture

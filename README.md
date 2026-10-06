@@ -4,7 +4,7 @@ A terrain-authoring tool for game developers. An AI agent drafts the terrain, an
 
 You write a **Brief**: a footprint, the places you care about, how long it should take to walk between them, and a mood. The AI drafts a coarse **Blockout** with a **Reason** for each choice. Quarry then measures that Blockout against your targets rather than taking the AI's word for it. Nothing moves on until you approve one exact **Revision**.
 
-> **Status: early.** The skeleton runs end to end from the CLI with a fake Agent: Brief → Brief Check → Blockout (Zones, Pads, Readings) → all Blockout Checks → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. Both Checkpoints have a browser page: a top-down Blockout editor at #1, and a first-person walk over the Terrain at #2, where every Check runs again on the real ground. The Export holds only the terrain mesh and its collision so far. The Claude-backed Agent is planned. See [the roadmap](#roadmap).
+> **Status: early.** The skeleton runs end to end from the CLI: Brief → Brief Check → Blockout (Zones, Pads, Readings) → all Blockout Checks → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. Both Checkpoints have a browser page: a top-down Blockout editor at #1, and a first-person walk over the Terrain at #2, where every Check runs again on the real ground. The Export holds only the terrain mesh and its collision so far. Drafts come from Claude by default, or from an offline fake with `--agent fake`. See [the roadmap](#roadmap).
 
 ## Quick start
 
@@ -14,6 +14,7 @@ Save the Brief below as `brief.json`, then run:
 
 ```sh
 uv sync
+export ANTHROPIC_API_KEY=...     # or skip it and pass --agent fake to draft and refine
 uv run quarry new island --brief brief.json
 uv run quarry draft island
 ```
@@ -95,8 +96,8 @@ exported island.glb from Blockout Revision 1 and Refine Plan Revision 1; collisi
 | ------------------------------------------------ | ------------------------------------------------------------ |
 | `quarry new SITE --brief FILE`                   | Create a Site from a Brief                                   |
 | `quarry new SITE --from OTHER_SITE`              | Create a variant Site from a copy of another Site's Brief, with its own history |
-| `quarry draft SITE`                              | Ask the Agent for a new Blockout Revision                    |
-| `quarry refine SITE`                             | Ask the Agent for a new Refine Plan Revision (needs an approved Blockout) |
+| `quarry draft SITE [--agent claude\|fake]`       | Ask the Agent for a new Blockout Revision, answering the latest Rejection note if there is one |
+| `quarry refine SITE [--agent claude\|fake]`      | Ask the Agent for a new Refine Plan Revision (needs an approved Blockout) |
 | `quarry open SITE [--port N] [--no-browser]`    | Serve the current Checkpoint's page on 127.0.0.1 and open it; Ctrl-C stops it |
 | `quarry status SITE`                             | Both Checkpoints' state, Revisions and Check results, or Brief Check problems before the first Draft |
 | `quarry show SITE N`                             | Revision N of the Draft at the current Checkpoint (Landmarks and Pads, Paths, Zones in Stacking Order, Readings), each choice with its Reason |
@@ -104,6 +105,8 @@ exported island.glb from Blockout Revision 1 and Refine Plan Revision 1; collisi
 | `quarry reject SITE N --note TEXT`               | Reject Revision N at the current Checkpoint, saying what was wrong |
 | `quarry revive SITE N`                           | Copy a rejected Revision forward as a new one                |
 | `quarry export SITE OUT.glb`                     | Write the `.glb` (needs an approved Refine Plan), then re-import it to verify the collision |
+
+The Agent is Claude (`claude-opus-5-5`, with the API key read from `ANTHROPIC_API_KEY`) unless you pass `--agent fake`, which drafts the same deterministic layout every time without a network call.
 
 `approve`, `reject`, `revive` and `show` act on the Blockout at Checkpoint #1, and on the Refine Plan once the Blockout is approved.
 
@@ -126,6 +129,7 @@ The Brief Check flags a Walk Target only when no route could meet it: one longer
 
 ## Rules the core enforces
 
+- **Every Draft is validated before it is kept.** Whatever the Agent returns is checked first, and a bad Draft is refused whole, with nothing recorded. The checks: the output is well formed; every choice has the AI's own Reason; every Waypoint has exactly one Landmark; every Walk Target has exactly one Path; it doesn't restate the Brief's targets; it sets nothing the other stage owns ([ADR-0003](docs/adr/0003-each-property-owned-by-exactly-one-stage.md)); it attempts no human act. The Claude Agent is offered no tools, so it can only answer with a Draft.
 - **Approval names one exact Revision.** Approving any Revision other than the current one is refused, and so is approving a rejected one.
 - **Misses are never silent.** Approval is refused while any missed Check lacks a Waiver.
 - **Human acts are human-only.** Only a human can approve, waive or reject. The Site refuses these acts from the Agent or from any automated caller, and no setting turns this off. When the CLI is run without a terminal (from a pipe, script or CI), it passes an automated identity, so the act is refused. See [ADR-0004](docs/adr/0004-checkpoint-acts-are-human-only-enforced-in-core.md).
@@ -158,6 +162,8 @@ quarry/
   checks.py     Checks: walk, slope, Pad and Reading Checks, measured on any surface
   surface.py    Surface: Ground + Zones (+ Refine Plan edges) → height and topmost Zone at any point
   agent.py      Agent port and the deterministic FakeAgent
+  claude_agent.py  The Agent's Claude adapter: prompts and output schemas
+  validation.py The validation layer every Agent output passes before it is kept
   brief.py      Brief and Walk Targets, loaded from JSON; the Brief Check
   blockout.py   Blockout: Landmarks with Pads, Paths, Zones and Readings, each with a Reason
   refine.py     Refine Plan: how each surface looks up close, with a Reason
@@ -187,7 +193,7 @@ The MVP is planned as ten vertical slices in [.scratch/quarry-mvp/issues/](.scra
 3. ✅ All Blockout Checks: overlapping Zones, slope-aware walking, Brief Check, Readings, Pads
 4. ✅ Checkpoint #1 page: a top-down Blockout view in the browser, with edits and human acts
 5. ✅ Checkpoint #2: Checks on Terrain, Waivers per Checkpoint, and a walkable preview
-6. Live Agent: a Claude-backed adapter with a validation layer
+6. ✅ Live Agent: a Claude-backed adapter with a validation layer
 7. Draft quality review (human)
 8. Going back: Reopen, carry-forward and Edit Requests
 9. Complete Export and the corruption self-test
