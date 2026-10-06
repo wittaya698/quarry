@@ -1,4 +1,15 @@
-"""The Agent port, and a fake that drafts without an LLM."""
+"""The Agent port, and a fake that drafts without an LLM.
+
+An Agent has two operations, each returning its Draft as plain data (the shape
+of `to_dict`), never as a trusted object:
+
+    draft_blockout(brief, rejection_note=None)
+    draft_refine_plan(brief, blockout, rejection_note=None)
+
+The Site passes every output through `quarry.validation` before keeping it. An
+Agent is handed a Brief and a Blockout, never the Site, so it has no way to
+perform a human act. `quarry.claude_agent` is the live adapter.
+"""
 import math
 
 from dataclasses import replace
@@ -44,7 +55,7 @@ class FakeAgent:
             Reason("ai", "a low rise in the middle gives the ground some shape"),
         )
         blockout = Blockout(tuple(landmarks.values()), paths, (rise,), _readings(brief.mood))
-        return _own_misses(brief, blockout)
+        return _own_misses(brief, blockout).to_dict()
 
     def draft_refine_plan(self, brief, blockout, rejection_note=None):
         ground = Refinement(
@@ -68,7 +79,7 @@ class FakeAgent:
             )
             for zone in blockout.zones
         )
-        return RefinePlan((ground, *zones))
+        return RefinePlan((ground, *zones)).to_dict()
 
 def _readings(mood):
     readings = []

@@ -3,7 +3,9 @@ name = "quarry"
 version = "0.1.0"
 description = "Terrain authoring: an AI drafts, a human approves at every Checkpoint."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "anthropic>=1.11.0",
+]
 
 [project.scripts]
 quarry = "quarry.cli:main"

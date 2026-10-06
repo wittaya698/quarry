@@ -16,12 +16,12 @@ Replace the fake with a real Claude-backed adapter behind the Agent port. The fa
 
 ## Acceptance criteria
 
-- [ ] The Claude adapter drafts Blockouts and Refine Plans; it uses the latest Claude model, with the API key read from the environment
-- [ ] A Rejection note is included in the next Blockout Draft's input
-- [ ] The validation layer rejects each invalid case listed above (tested with the fake returning bad output)
-- [ ] The Agent cannot perform Approval, Waiver, Rejection or Reopen (tested)
-- [ ] No test makes a live LLM call
-- [ ] The CLI and pages work unchanged with either adapter
+- [x] The Claude adapter drafts Blockouts and Refine Plans; it uses the latest Claude model, with the API key read from the environment
+- [x] A Rejection note is included in the next Blockout Draft's input
+- [x] The validation layer rejects each invalid case listed above (tested with the fake returning bad output)
+- [x] The Agent cannot perform Approval, Waiver, Rejection or Reopen (tested)
+- [x] No test makes a live LLM call
+- [x] The CLI and pages work unchanged with either adapter
 
 ## Blocked by
 
