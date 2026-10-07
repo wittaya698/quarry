@@ -19,8 +19,12 @@ A point the user names in the **Brief** (e.g. spawn, lighthouse) whose position 
 _Avoid_: Point, marker, POI
 
 **Walk Target**:
-A desired walking time or distance between two **Waypoints**, with a tolerance.
+A desired walking time or distance between two **Waypoints**, with a tolerance; the **Brief** may mark it no **Shortcut**.
 _Avoid_: Distance constraint, travel time
+
+**Shortcut**:
+A walkable route from a **Walk Target**'s first **Waypoint** to its second that is faster than the **Walk Target** allows, found anywhere on the ground rather than along the **Path**; walkable means never climbing steeper than the **Max Walkable Slope**, though it may drop down any slope, as a player can.
+_Avoid_: Bypass, cheat, skip
 
 **Walk Speed**:
 The player's walking pace that converts a walk time into a distance along a path.
@@ -67,6 +71,10 @@ _Avoid_: Footprint (that is the **Site**'s extent), base, plinth
 **Path**:
 An AI-drawn intended route between two **Landmarks** in a **Blockout**; the player may still walk anywhere.
 _Avoid_: Road, trail, route, navmesh
+
+**Cut Path**:
+A **Path** the AI marks to grade its own strip of ground, at least 4 m wide, rising evenly from its start **Landmark** to its end whatever the **Zones** beneath it do; used to force a route, such as a climb that winds up a hill too steep to climb anywhere else.
+_Avoid_: Trail, road, ramp
 
 **Reading**:
 The AI's explicit interpretation of a phrase in the **Brief**'s mood as something concrete (e.g. "gentle" → slopes ≤ 15°), carried in a **Blockout** with its **Reason**.
@@ -140,11 +148,14 @@ _Avoid_: Override, exception, force-approve
 - When the AI cannot meet a **Walk Target** it still delivers the **Blockout**, with the missed **Check** and a **Reason** owning the miss; it never rewrites the **Brief**'s targets
 - A **Blockout** carries one **Reading** per mood phrase it acted on; every measurable **Reading** is also a **Check** at both **Checkpoints**, and an unmeasurable one is shown but not checked
 - Every **Walk Target** has exactly one **Path**; a **Blockout** may also hold decorative **Paths** no **Walk Target** measures
+- A **Path** never changes the ground unless it is a **Cut Path**; the **Brief** asks for no **Shortcut**, a **Cut Path** is how the AI prevents one, and the **Shortcut** **Check** proves it
 - A **Walk Target** is met or missed by measurement along its **Path**, slope included, never by the AI's say-so
+- A **Walk Target** marked no **Shortcut** is also missed when any **Shortcut** exists; an unmarked one is never checked for **Shortcuts**, since the player may walk anywhere
 - Every **Check** runs at both **Checkpoints** — on the **Blockout**, then again on the **Terrain**; a **Waiver** given at the first never covers a miss at the second
 - Every **Draft** passes exactly one **Checkpoint** of its own; an earlier **Approval** never covers a new **Draft**
 - A **Blockout** has one **Ground** and zero or more **Zones**; a spot on the footprint may lie under several **Zones** at once
 - Where **Zones** overlap, height follows each **Zone**'s **Combine Mode** in **Stacking Order**; every surface value comes from the topmost **Zone** alone, never an average
+- A **Cut Path**'s strip lies above every **Zone**: it is refined in the **Refine Plan** as a surface of its own, exactly once, and its values win along it
 - A **Refine Plan** belongs to exactly one approved **Blockout**
 - A **Terrain** is built from exactly one approved **Blockout** plus one **Refine Plan**, and is traceable back to both
 - At the second **Checkpoint** the human reviews the **Refine Plan** together with the **Terrain** it produces; the **Approval** lands on the **Refine Plan**
@@ -152,8 +163,8 @@ _Avoid_: Override, exception, force-approve
 - A **Draft** has one or more **Revisions**; an **Approval** names exactly one of them
 - Every choice in a **Revision** carries exactly one **Reason**; a human edit replaces the AI's **Reason** for what it touched rather than leaving it standing
 - A rejected **Revision** is kept, never deleted; its note feeds the next **Draft**
-- **Reopening** a **Blockout** makes its **Refine Plan** and **Terrain** **Superseded**; the next **Refine Plan** carries untouched **Zones**' values forward verbatim (a **Zone** is touched if it was edited or overlaps the edited **Zone**'s old or new shape), each with a **Reason** naming the **Revision** it came from, and still needs its own **Approval**
-- The **Blockout** owns where and how big (**Zone** shapes and heights, **Combine Modes**, **Stacking Order**, **Landmarks**, **Paths**, **Readings**); the **Refine Plan** owns how it looks up close; no property belongs to both
+- **Reopening** a **Blockout** makes its **Refine Plan** and **Terrain** **Superseded**; the next **Refine Plan** carries untouched **Zones**' values forward verbatim (a **Zone** or **Cut Path** is touched if it was edited or overlaps the edited one's old or new shape), each with a **Reason** naming the **Revision** it came from, and still needs its own **Approval**
+- The **Blockout** owns where and how big (**Zone** shapes and heights, **Combine Modes**, **Stacking Order**, **Landmarks**, **Paths** and which are **Cut Paths**, **Readings**); the **Refine Plan** owns how it looks up close; no property belongs to both
 - An **Edit Request** at the second **Checkpoint** that needs a **Blockout**-owned change is never applied there — the AI names the property and offers a **Reopen**
 - Every **Landmark** has exactly one **Pad**; an **Export** marks where a **Landmark** goes but never contains its geometry
 - **Terrain** is never patched directly; any change reaches it only through a new **Blockout** or **Refine Plan** **Revision**
