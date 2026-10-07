@@ -4,17 +4,22 @@ A terrain-authoring tool for game developers. An AI agent drafts the terrain, an
 
 You write a **Brief**: a footprint, the places you care about, how long it should take to walk between them, and a mood. The AI drafts a coarse **Blockout** with a **Reason** for each choice. Quarry then measures that Blockout against your targets rather than taking the AI's word for it. Nothing moves on until you approve one exact **Revision**.
 
-> **Status: early.** The skeleton runs end to end from the CLI: Brief → Brief Check → Blockout (Zones, Pads, Readings) → all Blockout Checks → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. Both Checkpoints have a browser page: a top-down Blockout editor at #1, and a first-person walk over the Terrain at #2, where every Check runs again on the real ground. The Export holds only the terrain mesh and its collision so far. Drafts come from Claude by default, or from an offline fake with `--agent fake`. See [the roadmap](#roadmap).
+> **Status: early.** The skeleton runs end to end from the CLI: Brief → Brief Check → Blockout (Zones, Pads, Readings) → all Blockout Checks → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. Both Checkpoints have a browser page: a top-down Blockout editor at #1, and a first-person walk over the Terrain at #2, where every Check runs again on the real ground. The Export holds only the terrain mesh and its collision so far. Drafts come from Claude on your subscription by default, through the Claude Code CLI; `--agent api` uses the Anthropic API instead, and `--agent fake` an offline fake. See [the roadmap](#roadmap).
 
 ## Quick start
 
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/). Drafting on your Claude subscription also needs [Claude Code](https://code.claude.com) 2.1.280 or newer, logged in once to Quarry's own profile:
+
+```sh
+CLAUDE_CONFIG_DIR=~/.quarry/claude-code claude    # then type /login, and exit
+```
+
+That profile keeps your own CLAUDE.md, memory, hooks and MCP servers out of every Draft. To try Quarry without Claude, pass `--agent fake` to `draft` and `refine`.
 
 Save the Brief below as `brief.json`, then run:
 
 ```sh
 uv sync
-export ANTHROPIC_API_KEY=...     # or skip it and pass --agent fake to draft and refine
 uv run quarry new island --brief brief.json
 uv run quarry draft island
 ```
@@ -96,8 +101,8 @@ exported island.glb from Blockout Revision 1 and Refine Plan Revision 1; collisi
 | ------------------------------------------------ | ------------------------------------------------------------ |
 | `quarry new SITE --brief FILE`                   | Create a Site from a Brief                                   |
 | `quarry new SITE --from OTHER_SITE`              | Create a variant Site from a copy of another Site's Brief, with its own history |
-| `quarry draft SITE [--agent claude\|fake]`       | Ask the Agent for a new Blockout Revision, answering the latest Rejection note if there is one |
-| `quarry refine SITE [--agent claude\|fake]`      | Ask the Agent for a new Refine Plan Revision (needs an approved Blockout) |
+| `quarry draft SITE [--agent subscription\|api\|fake]` | Ask the Agent for a new Blockout Revision, answering the latest Rejection note if there is one |
+| `quarry refine SITE [--agent subscription\|api\|fake]` | Ask the Agent for a new Refine Plan Revision (needs an approved Blockout) |
 | `quarry open SITE [--port N] [--no-browser]`    | Serve the current Checkpoint's page on 127.0.0.1 and open it; Ctrl-C stops it |
 | `quarry status SITE`                             | Both Checkpoints' state, Revisions and Check results, or Brief Check problems before the first Draft |
 | `quarry show SITE N`                             | Revision N of the Draft at the current Checkpoint (Landmarks and Pads, Paths, Zones in Stacking Order, Readings), each choice with its Reason |
@@ -106,7 +111,15 @@ exported island.glb from Blockout Revision 1 and Refine Plan Revision 1; collisi
 | `quarry revive SITE N`                           | Copy a rejected Revision forward as a new one                |
 | `quarry export SITE OUT.glb`                     | Write the `.glb` (needs an approved Refine Plan), then re-import it to verify the collision |
 
-The Agent is Claude (`claude-opus-5-5`, with the API key read from `ANTHROPIC_API_KEY`) unless you pass `--agent fake`, which drafts the same deterministic layout every time without a network call.
+The `--agent` choices:
+
+| `--agent`              | Who drafts                                                                     | Paid by |
+| ---------------------- | ------------------------------------------------------------------------------ | ------- |
+| `subscription` (default) | Claude through the Claude Code CLI (`claude -p`), in Quarry's own profile, with no tools | Your Claude subscription |
+| `api`                  | Claude through the Anthropic API; needs `ANTHROPIC_API_KEY`                     | Per token |
+| `fake`                 | The same deterministic layout every time, with no network call                 | Free |
+
+Both Claude choices draft with `claude-opus-5-5` at `high` effort and the same prompts. An API key in your environment never changes the default, and `subscription` hides it from the CLI so it can't bill per token.
 
 `approve`, `reject`, `revive` and `show` act on the Blockout at Checkpoint #1, and on the Refine Plan once the Blockout is approved.
 
@@ -162,7 +175,8 @@ quarry/
   checks.py     Checks: walk, slope, Pad and Reading Checks, measured on any surface
   surface.py    Surface: Ground + Zones (+ Refine Plan edges) → height and topmost Zone at any point
   agent.py      Agent port and the deterministic FakeAgent
-  claude_agent.py  The Agent's Claude adapter: prompts and output schemas
+  claude_agent.py  The Claude adapters' shared prompts, schemas and model; the API adapter
+  claude_code_agent.py  The subscription adapter: `claude -p` in an isolated profile
   validation.py The validation layer every Agent output passes before it is kept
   brief.py      Brief and Walk Targets, loaded from JSON; the Brief Check
   blockout.py   Blockout: Landmarks with Pads, Paths, Zones and Readings, each with a Reason
@@ -198,4 +212,4 @@ The MVP is planned as eleven vertical slices in [.scratch/quarry-mvp/issues/](.s
 8. Going back: Reopen, carry-forward and Edit Requests
 9. Complete Export and the corruption self-test
 10. Verify in Godot 4 (human)
-11. Subscription Agent: draft on the Claude subscription via Claude Code, the default (blocks 7)
+11. ✅ Subscription Agent: draft on the Claude subscription via Claude Code, the default (blocks 7)

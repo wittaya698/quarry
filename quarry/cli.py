@@ -9,13 +9,16 @@ import anthropic
 from quarry.agent import FakeAgent
 from quarry.brief import Brief
 from quarry.claude_agent import AgentUnavailable, ClaudeAgent
+from quarry.claude_code_agent import ClaudeCodeAgent
 from quarry.export import ExportError
 from quarry.identity import Automated, Human
 from quarry.page import serve
 from quarry.site import Refused, Site
 from quarry.validation import InvalidDraft
 
-AGENTS = {"claude": ClaudeAgent, "fake": FakeAgent}
+# Who drafts. The subscription is the default whatever the environment holds:
+# an API key never switches Quarry to per-token billing on its own.
+AGENTS = {"subscription": ClaudeCodeAgent, "api": ClaudeAgent, "fake": FakeAgent}
 
 
 def main(argv=None):
@@ -100,8 +103,9 @@ def _parser():
 
 def _agent_option(command):
     command.add_argument(
-        "--agent", choices=AGENTS, default="claude",
-        help="who drafts: Claude (needs ANTHROPIC_API_KEY) or the offline fake",
+        "--agent", choices=AGENTS, default="subscription",
+        help="who drafts: your Claude subscription via Claude Code (default), "
+        "the Anthropic API (needs ANTHROPIC_API_KEY, billed per token), or the offline fake",
     )
 
 

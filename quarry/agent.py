@@ -8,7 +8,8 @@ of `to_dict`), never as a trusted object:
 
 The Site passes every output through `quarry.validation` before keeping it. An
 Agent is handed a Brief and a Blockout, never the Site, so it has no way to
-perform a human act. `quarry.claude_agent` is the live adapter.
+perform a human act. The live adapters are `quarry.claude_code_agent` (on the
+Claude subscription, the default) and `quarry.claude_agent` (the Anthropic API).
 """
 import math
 

@@ -18,14 +18,14 @@ Quarry runs only on its developer's own machine, so drafting should run on their
 
 ## Acceptance criteria
 
-- [ ] `ClaudeCodeAgent` drafts Blockouts and Refine Plans through `claude -p` with structured output, using the shared prompts and schemas
-- [ ] It is the CLI default; `--agent subscription | api | fake` selects the adapter, and an API key in the environment does not change the default
-- [ ] Both Claude adapters use the same pinned model and effort
-- [ ] The CLI is invoked with the Quarry profile, an empty working directory, no tools and no MCP servers (tested)
-- [ ] The latest Rejection note reaches the next Draft's input, as with `api`
-- [ ] An outdated CLI, a logged-out profile, a missing binary, a usage limit and a timeout each fail with an actionable message and record nothing (tested)
-- [ ] No test runs the real `claude` binary; tests inject a fake runner
-- [ ] README explains the one-time profile login and the `--agent` choices
+- [x] `ClaudeCodeAgent` drafts Blockouts and Refine Plans through `claude -p` with structured output, using the shared prompts and schemas
+- [x] It is the CLI default; `--agent subscription | api | fake` selects the adapter, and an API key in the environment does not change the default
+- [x] Both Claude adapters use the same pinned model and effort
+- [x] The CLI is invoked with the Quarry profile, an empty working directory, no tools and no MCP servers (tested)
+- [x] The latest Rejection note reaches the next Draft's input, as with `api`
+- [x] An outdated CLI, a logged-out profile, a missing binary, a usage limit and a timeout each fail with an actionable message and record nothing (tested)
+- [x] No test runs the real `claude` binary; tests inject a fake runner
+- [x] README explains the one-time profile login and the `--agent` choices
 
 ## Blocked by
 
