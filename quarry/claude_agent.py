@@ -1,5 +1,6 @@
-"""The Agent port's Claude adapter: drafts Blockouts and Refine Plans with the
-latest Claude model. The API key comes from the environment (ANTHROPIC_API_KEY).
+"""The Agent port's Claude adapters' shared prompts and schemas, and the API
+adapter: drafts Blockouts and Refine Plans with the latest Claude model. The
+API key comes from the environment (ANTHROPIC_API_KEY).
 
 The model is offered no tools, so it has nothing to call: it can only answer
 with a Draft as JSON, which the Site then validates before anything is kept.
@@ -8,7 +9,8 @@ import json
 
 from quarry.validation import InvalidDraft
 
-MODEL = "claude-opus-5-5"
+MODEL = "claude-opus-5-5"  # both Claude adapters draft with this, at this effort
+EFFORT = "high"
 
 
 class AgentUnavailable(Exception):
@@ -123,14 +125,9 @@ Terrain from the two, and every Check runs again on that Terrain.
 """
 
 
-class ClaudeAgent:
-    def __init__(self, client=None, model=MODEL):
-        if client is None:
-            import anthropic
-
-            client = anthropic.Anthropic()
-        self.client = client
-        self.model = model
+class ClaudeDrafter:
+    """What every Claude adapter shares: the prompts and the schemas. Each
+    adapter supplies only `_ask`, which reaches the model its own way."""
 
     def draft_blockout(self, brief, rejection_note=None):
         prompt = f"The Brief:\n{json.dumps(brief.to_dict(), indent=2)}"
@@ -148,13 +145,28 @@ class ClaudeAgent:
         return self._ask(REFINE_PLAN_SYSTEM, prompt, REFINE_PLAN_SCHEMA)
 
     def _ask(self, system, prompt, schema):
+        raise NotImplementedError
+
+
+class ClaudeAgent(ClaudeDrafter):
+    """Drafts through the Anthropic API, billed per token (`--agent api`)."""
+
+    def __init__(self, client=None, model=MODEL):
+        if client is None:
+            import anthropic
+
+            client = anthropic.Anthropic()
+        self.client = client
+        self.model = model
+
+    def _ask(self, system, prompt, schema):
         try:
             response = self.client.beta.messages.create(
                 model=self.model,
                 max_tokens=16000,
                 system=system,
                 messages=[{"role": "user", "content": prompt}],
-                output_config={"effort": "high", "format": {"type": "json_schema", "schema": schema}},
+                output_config={"effort": EFFORT, "format": {"type": "json_schema", "schema": schema}},
                 betas=["server-side-fallback-2026-07-01"],
                 fallbacks="default",  # a declined request is re-run on a fallback model
             )
@@ -162,7 +174,7 @@ class ClaudeAgent:
             if "authentication" not in str(error):
                 raise
             raise AgentUnavailable(
-                "no Anthropic credentials: set ANTHROPIC_API_KEY, or use --agent fake"
+                "no Anthropic credentials: set ANTHROPIC_API_KEY, or use --agent subscription"
             ) from None
         if response.stop_reason != "end_turn":
             raise InvalidDraft(f"the model stopped early ({response.stop_reason}); nothing was drafted")
