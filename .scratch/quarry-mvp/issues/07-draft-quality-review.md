@@ -12,7 +12,7 @@ A human judges whether the live Agent's Drafts are actually good. Run it on 3–
 
 ## Acceptance criteria
 
-- [ ] Sample Briefs are committed as fixtures
+- [x] Sample Briefs are committed as fixtures (`examples/briefs/`)
 - [ ] For each sample, the reviewer records which Readings, placements and Reasons they would accept or reject, and why
 - [ ] The prompts are revised and the samples re-run until the reviewer accepts the Drafts as a reasonable starting point
 - [ ] Any new domain term that comes up is added to `CONTEXT.md`

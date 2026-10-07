@@ -1,0 +1,9 @@
+{
+  "footprint": [100, 100],
+  "mood": "a tight, flat walled courtyard with one raised terrace",
+  "waypoints": ["gate", "fountain", "terrace"],
+  "walk_targets": [
+    {"from": "gate", "to": "fountain", "time": 25, "tolerance": 0.1},
+    {"from": "fountain", "to": "terrace", "time": 20, "tolerance": 0.1}
+  ]
+}

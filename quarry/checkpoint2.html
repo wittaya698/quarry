@@ -22,6 +22,11 @@
   header .state { color: var(--muted); }
   main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; padding: 16px; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  /* Side by side, the view stays in view while the column of Checks and the Refine Plan scrolls. */
+  @media (min-width: 901px) {
+    .stage { position: sticky; top: 16px; align-self: start; }
+    .view { max-height: calc(100vh - 110px); }
+  }
   .view { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 4 / 3; }
   .view canvas { display: block; width: 100%; height: 100%; }
   .hud { position: absolute; left: 10px; top: 10px; color: #fff; background: rgba(0,0,0,.55); padding: 6px 9px; border-radius: 6px; font: 12px/1.4 ui-monospace, monospace; pointer-events: none; white-space: pre; }
@@ -63,7 +68,7 @@
   <span class="state" id="state">loading…</span>
 </header>
 <main>
-  <div>
+  <div class="stage">
     <div class="view" id="view"><div class="hud" id="hud"></div></div>
     <p class="hint">Click the view to walk: W A S D to move at the Brief's Walk Speed, the mouse to look, Esc to let go. You can't climb anything steeper than the Max Walkable Slope or leave the footprint. Press O for an overview from above. Blue rings are Pads, and white lines are Paths.</p>
   </div>

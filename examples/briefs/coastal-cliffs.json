@@ -1,0 +1,10 @@
+{
+  "footprint": [600, 400],
+  "mood": "steep, dramatic coastal cliffs dropping to a calm sheltered cove",
+  "waypoints": ["landing", "cliff_top", "lookout"],
+  "walk_targets": [
+    {"from": "landing", "to": "cliff_top", "time": 240, "tolerance": 0.1},
+    {"from": "cliff_top", "to": "lookout", "distance": 150, "tolerance": 0.1}
+  ],
+  "max_walkable_slope": 35
+}

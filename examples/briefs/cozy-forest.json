@@ -1,0 +1,10 @@
+{
+  "footprint": [300, 300],
+  "mood": "a gentle, cozy forest clearing; soft rises, nothing steep or exposed",
+  "waypoints": ["cabin", "well", "glade"],
+  "walk_targets": [
+    {"from": "cabin", "to": "well", "time": 45, "tolerance": 0.15},
+    {"from": "cabin", "to": "glade", "time": 150, "tolerance": 0.1}
+  ],
+  "max_walkable_slope": 20
+}

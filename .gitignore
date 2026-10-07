@@ -30,3 +30,6 @@ node_modules/
 .DS_Store
 .vscode/
 .idea/
+
+# Draft quality review Sites (issue 07); the verdicts are kept in review.md
+.scratch/quarry-mvp/review/sites/

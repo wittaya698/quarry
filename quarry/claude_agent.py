@@ -87,7 +87,30 @@ Coordinates are metres on the Brief's footprint: x from 0 to width, y from 0 to 
   becomes a ceiling: max_slope (degrees) or max_height (metres). Otherwise set
   measure and limit to null.
 - Every choice carries a Reason: one plain sentence saying why.
+- Reasons describe what the ground and the trail look like: where a Path climbs,
+  what it passes, what it avoids, how it turns. Never state a slope, gradient or
+  angle. Code measures those on the Terrain afterwards, and a number you guessed
+  will be wrong. A length or walk time you worked out from a Path's points is fine.
 - Keep every measured Path under the Max Walkable Slope, and keep Pads off slopes.
+  The ground is built exactly as below, and code measures it; plan with it:
+  - A dome Zone of height h and radius r stands h * (1 + cos(pi * d / r)) / 2
+    above what lies beneath, at distance d from its center. It is steepest halfway
+    out, at atan(1.57 * h / r). To stay under a slope limit keep h / r at most:
+    0.37 for 30°, 0.30 for 25°, 0.23 for 20°, 0.17 for 15°, 0.11 for 10°.
+    Overlapping domes add their slopes, so keep them apart or lower.
+  - A flat Zone has a sheer step at its rim, and so does any Zone combined with
+    max or replace where it changes the height. The Refine Plan eases rims later;
+    here they are vertical. A measured Path that crosses such a rim misses its
+    slope limit. Reach raised ground over domes, keep Paths off flat rims, and
+    use a step only where a step is the point, like a cliff.
+  - If a Waypoint must sit on raised flat ground (a terrace, a plateau), a Path to
+    it has to cross the step: say so in its Reason, e.g. "climbs the terrace step,
+    which stays sheer until the Refine Plan eases it". Never call a step a ramp.
+  - A Pad inside a flat Zone is level. A Pad of radius p on a dome's crown tilts
+    by about atan(4.93 * h * p / r^2); it must stay under 3°.
+  - A max_slope Reading measures the steepest point anywhere on the footprint,
+    every Zone rim included, and a max_height Reading the highest point. Set a
+    ceiling only if your own Zones stay under it; otherwise leave it unmeasured.
 - If you cannot meet a Walk Target, still deliver the Blockout and say so in that
   Path's Reason. Never change the Brief's targets.
 - Where and how big belongs to the Blockout. How the ground looks up close
@@ -117,8 +140,12 @@ Terrain from the two, and every Check runs again on that Terrain.
   Zone's edge blends over), roughness (metres of height noise), seed (an integer;
   the only randomness in the Terrain) and vegetation_density (0 to 1).
 - Every Refinement carries a Reason: one plain sentence saying why, including how
-  it affects each Path it touches, e.g. "kept roughness low along the Path so the
-  walk stays at 3:05". Roughness and falloff can steepen a Path or slow its walk.
+  it affects each Path it touches, e.g. "kept roughness low where the Path crosses
+  so the trail stays smooth underfoot". Roughness and falloff can steepen a Path
+  or slow its walk.
+- Reasons describe what the surface looks and feels like. Never state a slope,
+  angle or walk time: code measures those on the Terrain afterwards, and a number
+  you guessed will be wrong.
 - The Blockout is approved and fixed: where things are and how big (positions,
   radii, heights, Combine Modes, Stacking Order, Landmarks, Paths, Readings)
   belongs to it. Do not restate or change any of it.

@@ -24,6 +24,11 @@
   header .state { color: var(--muted); }
   main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; padding: 16px; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  /* Side by side, the map stays in view while the column of Checks and Reasons scrolls. */
+  @media (min-width: 901px) {
+    .map { position: sticky; top: 16px; align-self: start; }
+    svg { max-height: calc(100vh - 110px); }
+  }
   .map { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
   svg { width: 100%; height: auto; display: block; touch-action: none; user-select: none; }
   .hint { color: var(--muted); font-size: 12px; margin: 6px 4px 0; }
@@ -54,7 +59,7 @@
   .row > * { flex: 1; }
   .error { background: color-mix(in srgb, var(--miss) 15%, var(--panel)); border-color: var(--miss); display: none; }
   .error.shown { display: block; }
-  svg text { font-size: 11px; fill: var(--ink); pointer-events: none; }
+  svg text { fill: var(--ink); pointer-events: none; paint-order: stroke; stroke: var(--ground); stroke-linejoin: round; } /* sized per render: the map is in metres */
   .zone-body { cursor: move; }
   .zone-rim { cursor: ew-resize; }
   .landmark { cursor: move; }
@@ -151,8 +156,16 @@ function renderMap(blockout) {
   const svg = document.getElementById("map");
   const [w, d] = state.footprint;
   svg.setAttribute("viewBox", `-10 -10 ${w + 20} ${d + 20}`);
+  // The map's units are metres; markers, lines and labels are sized in screen
+  // pixels, so they read the same on a 100 m courtyard and a 2 km island.
+  const px = Math.max((w + 20) / (svg.clientWidth || 600), (d + 20) / (svg.clientHeight || 600));
+  svg.style.fontSize = `${11 * px}px`;
   svg.replaceChildren();
-  el("rect", { x: 0, y: 0, width: w, height: d, fill: "var(--ground)", stroke: "var(--line)" }, svg);
+  el("rect", { x: 0, y: 0, width: w, height: d, fill: "var(--ground)", stroke: "var(--line)", "stroke-width": px }, svg);
+  // The Terrain ends at the footprint, so a Zone is drawn only where it lands.
+  el("rect", { x: 0, y: 0, width: w, height: d }, el("clipPath", { id: "footprint" }, svg));
+  const zoneLayer = el("g", { "clip-path": "url(#footprint)" }, svg);
+  const labels = []; // placed after every shape is drawn; see placeLabels
 
   blockout.zones.forEach((zone, i) => {
     const [cx, cy] = zone.center;
@@ -161,14 +174,17 @@ function renderMap(blockout) {
     const fill = zone.height < 0 ? "#3d7bd9" : "var(--zone)";
     const body = el("circle", {
       cx, cy: yOf(cy), r: zone.radius, fill, "fill-opacity": opacity,
-      stroke: isSelected ? "var(--human)" : fill, "stroke-width": isSelected ? 2 : 1,
-      "stroke-dasharray": zone.profile === "flat" ? "" : "4 3", class: "zone-body",
-    }, svg);
-    el("text", { x: cx, y: yOf(cy) - 4, "text-anchor": "middle" }, svg).textContent =
-      `${i + 1} · ${zone.name}`;
-    el("text", { x: cx, y: yOf(cy) + 10, "text-anchor": "middle" }, svg).textContent =
-      `${zone.combine} ${zone.height >= 0 ? "+" : ""}${zone.height.toFixed(1)} m`;
-    const rim = el("circle", { cx: cx + zone.radius, cy: yOf(cy), r: 4, fill: "var(--panel)", stroke: fill, class: "zone-rim" }, svg);
+      stroke: isSelected ? "var(--human)" : fill, "stroke-width": (isSelected ? 2 : 1) * px,
+      "stroke-dasharray": zone.profile === "flat" ? "" : `${4 * px} ${3 * px}`, class: "zone-body",
+    }, zoneLayer);
+    const r = zone.radius, y = yOf(cy), inset = 24 * px, outset = 18 * px;
+    labels.push({
+      priority: r, shape: body,
+      lines: [`${i + 1} · ${zone.name}`, `${zone.combine} ${zone.height >= 0 ? "+" : ""}${zone.height.toFixed(1)} m`],
+      spots: [[cx, y, "middle"], ...(r > 2 * inset ? [[cx, y - r + inset, "middle"], [cx, y + r - inset, "middle"]] : []),
+              [cx, y - r - outset, "middle"], [cx, y + r + outset, "middle"]],
+    });
+    const rim = el("circle", { cx: cx + zone.radius, cy: yOf(cy), r: 4 * px, fill: "var(--panel)", stroke: fill, "stroke-width": px, class: "zone-rim" }, svg);
     draggable(body, { kind: "zone", key: zone.name }, (x, y) => {
       body.setAttribute("cx", x); body.setAttribute("cy", yOf(y));
       rim.setAttribute("cx", x + zone.radius); rim.setAttribute("cy", yOf(y));
@@ -182,7 +198,7 @@ function renderMap(blockout) {
   for (const path of blockout.paths) {
     el("polyline", {
       points: path.points.map(([x, y]) => `${x},${yOf(y)}`).join(" "), fill: "none",
-      stroke: "var(--path)", "stroke-width": 2, "stroke-dasharray": path.decorative ? "6 4" : "",
+      stroke: "var(--path)", "stroke-width": 2 * px, "stroke-dasharray": path.decorative ? `${6 * px} ${4 * px}` : "",
       "stroke-linecap": "round",
     }, svg);
   }
@@ -191,17 +207,47 @@ function renderMap(blockout) {
     const [x, y] = landmark.position;
     const isSelected = selected && selected.kind === "landmark" && selected.key === landmark.name;
     const group = el("g", { class: "landmark" }, svg);
-    el("circle", { cx: x, cy: yOf(y), r: landmark.pad_radius, fill: "none", stroke: "var(--pad)", "stroke-dasharray": "3 2" }, group);
-    el("circle", { cx: x, cy: yOf(y), r: isSelected ? 5 : 4, fill: isSelected ? "var(--human)" : "var(--ink)" }, group);
-    el("text", { x: x + landmark.pad_radius + 3, y: yOf(y) + 4 }, group).textContent =
-      `${landmark.ai_chosen ? "★ " : ""}${landmark.name}`;
+    el("circle", { cx: x, cy: yOf(y), r: landmark.pad_radius, fill: "none", stroke: "var(--pad)", "stroke-width": px, "stroke-dasharray": `${3 * px} ${2 * px}` }, group);
+    el("circle", { cx: x, cy: yOf(y), r: (isSelected ? 5 : 4) * px, fill: isSelected ? "var(--human)" : "var(--ink)" }, group);
+    const gap = landmark.pad_radius + 3 * px;
+    labels.push({
+      priority: -1, shape: group, parent: group, dot: [x, yOf(y)],
+      lines: [`${landmark.ai_chosen ? "★ " : ""}${landmark.name}`],
+      spots: [[x + gap, yOf(y), "start"], [x - gap, yOf(y), "end"], [x, yOf(y) - gap - 6 * px, "middle"], [x, yOf(y) + gap + 6 * px, "middle"]],
+    });
     draggable(group, { kind: "landmark", key: landmark.name }, (nx, ny) => {
       group.setAttribute("transform", `translate(${nx - x} ${yOf(ny) - yOf(y)})`);
     }, (nx, ny) => act("/api/edit", { revision: state.revision, change: { move_landmark: landmark.name, to: [round(nx), round(ny)] } }));
   }
+  placeLabels(svg, labels, px, [-10, -10, w + 10, d + 10]);
+}
+
+// Labels go where they collide with nothing: Landmarks' first, then Zones' from
+// the smallest. Each tries its spots in order; one with no free spot becomes the
+// shape's hover tooltip instead (the Elements list names it too).
+function placeLabels(svg, labels, px, [left, top, right, bottom]) {
+  const pad = 2 * px, line = 13 * px;
+  const taken = labels.filter((l) => l.dot).map(({ dot: [x, y] }) => ({ x: x - 5 * px, y: y - 5 * px, width: 10 * px, height: 10 * px }));
+  const clear = (b) => b.x >= left && b.y >= top && b.x + b.width <= right && b.y + b.height <= bottom &&
+    taken.every((t) => b.x + b.width + pad <= t.x || t.x + t.width + pad <= b.x || b.y + b.height + pad <= t.y || t.y + t.height + pad <= b.y);
+  for (const label of labels.sort((a, b) => a.priority - b.priority)) {
+    const text = el("text", { "stroke-width": 3 * px }, label.parent || svg); // a halo over Paths
+    const spans = label.lines.map((words) => { const span = el("tspan", {}, text); span.textContent = words; return span; });
+    const spot = label.spots.find(([x, y, anchor]) => {
+      text.setAttribute("text-anchor", anchor);
+      spans.forEach((span, i) => {
+        span.setAttribute("x", x);
+        span.setAttribute("y", y + (i - (spans.length - 1) / 2) * line + 4 * px);
+      });
+      return clear(text.getBBox());
+    });
+    if (spot) taken.push(text.getBBox());
+    else { text.remove(); el("title", {}, label.shape).textContent = label.lines.join(" · "); }
+  }
 }
 
 const round = (v) => Math.round(v * 10) / 10;
+new ResizeObserver(() => { if (state) renderMap(state.blockout); }).observe(document.getElementById("map"));
 
 function draggable(node, target, onMove, onDrop) {
   node.addEventListener("pointerdown", (event) => {
