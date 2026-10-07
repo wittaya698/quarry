@@ -70,7 +70,7 @@
 <main>
   <div class="stage">
     <div class="view" id="view"><div class="hud" id="hud"></div></div>
-    <p class="hint">Click the view to walk: W A S D to move at the Brief's Walk Speed, the mouse to look, Esc to let go. You can't climb anything steeper than the Max Walkable Slope or leave the footprint. Press O for an overview from above. Blue rings are Pads, and white lines are Paths.</p>
+    <p class="hint">Click the view to walk: W A S D to move at the Brief's Walk Speed (hold Shift for 10×), the mouse to look, Esc to let go. You can't climb anything steeper than the Max Walkable Slope or leave the footprint. Press O for an overview from above. Blue rings are Pads, and white lines are Paths.</p>
   </div>
   <aside>
     <section class="error" id="error"></section>
@@ -299,6 +299,7 @@ document.addEventListener("keydown", (e) => {
 });
 document.addEventListener("keyup", (e) => keys.delete(e.code));
 
+const FAST_FORWARD = 10;
 let last = performance.now();
 function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
@@ -306,7 +307,9 @@ function frame(now) {
   if (state) {
     const forward = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0);
     const strafe = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
-    if (!walker.overview) walk(dt, forward, -strafe);
+    // Shift fast-forwards the walk for the reviewer; every step still obeys the slope limit.
+    const pace = keys.has("ShiftLeft") || keys.has("ShiftRight") ? FAST_FORWARD : 1;
+    if (!walker.overview) walk(dt * pace, forward, -strafe);
     const [w, d] = state.footprint;
     scene.fog = walker.overview ? null : fog;
     if (walker.overview) {
@@ -317,7 +320,7 @@ function frame(now) {
       camera.rotation.set(walker.pitch, walker.yaw + Math.PI, 0);
     }
     document.getElementById("hud").innerHTML =
-      `${walker.overview ? "overview (O to walk)" : `walking at ${state.walk_speed} m/s`}\n` +
+      `${walker.overview ? "overview (O to walk)" : `walking at ${state.walk_speed} m/s${pace > 1 ? ` ×${pace} (Shift)` : ""}`}\n` +
       `at (${walker.x.toFixed(0)}, ${walker.y.toFixed(0)}) · ground ${heightAt(walker.x, walker.y).toFixed(1)} m\n` +
       (walker.blocked ? `<span class="blocked">too steep: over ${state.max_walkable_slope}°</span>` : `slope ${walker.slope.toFixed(1)}°`);
     renderer.render(scene, camera);

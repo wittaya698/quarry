@@ -93,3 +93,27 @@ Every Check passes on all four samples, and every Reason matches what the Checks
 - **cliffs:** the cliffs come from the cove's `replace` rim and no Path crosses them. The steep Reading is left unmeasured, which is honest: "steep" is a minimum, not a ceiling.
 
 Still for the reviewer: do the layouts read as the moods?
+
+**Reviewer:** approved all four Round 3 Blockouts as they are (2026-10-08).
+
+## Refine Plans, Round 1 — on the approved Round 3 Blockouts (2026-10-08)
+
+| Sample | Checks on the Terrain |
+|---|---|
+| cozy-forest | all pass |
+| coastal-cliffs | all pass; the cove keeps a 1 m `steep` falloff, so the cliffs stay sheer |
+| long-climb | all pass |
+| tight-courtyard | **"flat" misses its 15° ceiling** (17.6°); fountain→terrace steepens from 11.9° to 16.7°, still passing |
+
+**Why the courtyard misses.** The Refine Plan isn't the cause; the Terrain Builder is.
+- The refined Surface peaks at 13.0°. The Terrain peaks at 17.6°, 14 m from the terrace's centre.
+- The Builder holds each Pad level out to its radius plus a 3 m margin (here 8 + 3 = 11 m), then eases back to the natural ground over 6 m (`_flatten_pads`, `_PAD_BLEND`).
+- The terrace's flat top already ends at 11 m. So the ease squeezes the start of the ramp's descent into 6 m, and the ground gets steeper there.
+- This is code behaviour. The prompt can't know it, and the Agent can't fix it.
+
+**Reasons:** they describe the surfaces in words and quote no numbers. They still promise outcomes the model can't verify, though: "climbs it evenly without being steepened" for the courtyard ramp, which did steepen.
+
+**Reviewer, long-climb (2026-10-08):** reject. *"I shouldn't be able to climb straight to the peak. I must at least walk circular around the mountain."*
+- On the Terrain, a straight line from camp to the summit is walkable: its steepest point is 21.1° against the 25° limit, and it takes 74 s against the 10:00 target.
+- The Blockout has no way to prevent this. A hill steep enough to block the climb would also block the spiral Path, because Zones are discs and a Path doesn't shape the ground.
+- Fixing it needs a design change, not just a prompt change.
