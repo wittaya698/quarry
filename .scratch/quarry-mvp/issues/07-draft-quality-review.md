@@ -21,3 +21,4 @@ A human judges whether the live Agent's Drafts are actually good. Run it on 3–
 
 - `04-checkpoint-1-page.md`
 - `06-live-agent.md`
+- `11-subscription-agent.md` (tune on the subscription, not per-token billing)

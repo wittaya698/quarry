@@ -186,7 +186,7 @@ tests/
 
 ## Roadmap
 
-The MVP is planned as ten vertical slices in [.scratch/quarry-mvp/issues/](.scratch/quarry-mvp/issues/):
+The MVP is planned as eleven vertical slices in [.scratch/quarry-mvp/issues/](.scratch/quarry-mvp/issues/):
 
 1. ✅ Tracer: Brief → Blockout → Checks → Approve/Reject via CLI
 2. ✅ Tracer: Refine Plan → Terrain → `.glb`
@@ -198,3 +198,4 @@ The MVP is planned as ten vertical slices in [.scratch/quarry-mvp/issues/](.scra
 8. Going back: Reopen, carry-forward and Edit Requests
 9. Complete Export and the corruption self-test
 10. Verify in Godot 4 (human)
+11. Subscription Agent: draft on the Claude subscription via Claude Code, the default (blocks 7)
