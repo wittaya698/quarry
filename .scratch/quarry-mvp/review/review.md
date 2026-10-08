@@ -166,3 +166,5 @@ Site: `.scratch/quarry-mvp/review/sites/round5/long-climb`. The Brief now asks 1
 - A simulated walker that follows the trail reaches the top without stalling (864 of 867 m).
 
 Still for the reviewer: walk it, and confirm the summit can't be climbed straight up.
+
+**Reviewer, Round 5 walk (2026-10-09):** accepted. The summit can't be climbed straight up, and the trail walks to the top. The reviewer approved the Refine Plan. long-climb's verdict from Round 1 is resolved.

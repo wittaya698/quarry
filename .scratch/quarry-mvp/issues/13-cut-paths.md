@@ -27,7 +27,7 @@ The AI can mark a Path as a **Cut Path**. Its strip of ground then rises evenly 
 - [x] The Terrain and the `.glb` carry the strip
 - [x] Both pages show Cut Paths
 - Reopen carry-forward for Cut Paths moved to issue 08, which builds Reopen (not yet built when 13 was done)
-- [ ] The long-climb sample is redrafted with the live Agent and passes its Shortcut Check at both Checkpoints, and in the walk view the summit can't be climbed straight up
+- [x] The long-climb sample is redrafted with the live Agent and passes its Shortcut Check at both Checkpoints, and in the walk view the summit can't be climbed straight up
 
 ## Blocked by
 
