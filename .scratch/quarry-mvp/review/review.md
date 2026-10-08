@@ -137,3 +137,12 @@ Site: `.scratch/quarry-mvp/review/sites/round4/long-climb`, drafted live after t
 - **shortcut camp→summit passes:** the fastest walkable route is the trail itself, at 10:01 against the 9:30 floor. Every slope and Pad Check passes.
 - **walk spring→summit misses** (10:19 against 5:00), because the sample Brief contradicts itself. A 5:00 spring→summit would make camp→spring→summit about 5:20, a Shortcut on the forced climb. The AI saw this, routed spring→summit back through camp, and owned the miss in its Reason.
 - Follow-ups: the sample Brief's spring→summit target is now 10:00 ±10%. Issue 15 has the Brief Check refuse such Briefs before drafting. The round4 Site keeps the old Brief, so this miss needs a Waiver.
+
+**Reviewer:** approved the Round 4 Blockout, waiving walk spring→summit (2026-10-08).
+
+**Refine Plan, Round 4 (live).** The Cut Path is almost bare (roughness 0.05 m) with 1 m bank easing; the hill's flank keeps a `steep` 4 m falloff. On the Terrain:
+- **shortcut camp→summit passes** at 10:01 against the 9:30 floor.
+- Every other Check passes except the waived spring→summit miss, which needs a fresh Waiver here.
+- The trail's steepest point rises from 5.5° to 12.5°. This is Terrain resolution, not the plan: heights are stored every 2 m, so some points on the 5 m trail's centreline borrow height from a sample on the bank. Still well under 25°.
+
+Still for the reviewer: walk it, and confirm the summit can't be climbed straight up.
