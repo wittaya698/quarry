@@ -20,13 +20,13 @@ The AI can mark a Path as a **Cut Path**. Its strip of ground then rises evenly 
 
 ## Acceptance criteria
 
-- [ ] A Blockout round-trips `cut` and `width`; validation refuses a Cut Path under 4 m wide, and a Refine Plan that doesn't refine each Cut Path exactly once
-- [ ] On the Blockout, height along a Cut Path rises evenly from start to end, and its banks are sheer (tested)
-- [ ] A non-cut Path never changes the ground (tested)
-- [ ] The Refine Plan's values for a Cut Path win along its strip, and its falloff eases the banks (tested)
-- [ ] The Terrain and the `.glb` carry the strip
-- [ ] Both pages show Cut Paths
-- [ ] Reopen carry-forward treats Cut Paths like Zones (tested)
+- [x] A Blockout round-trips `cut` and `width`; validation refuses a Cut Path under 4 m wide, and a Refine Plan that doesn't refine each Cut Path exactly once
+- [x] On the Blockout, height along a Cut Path rises evenly from start to end, and its banks are sheer (tested)
+- [x] A non-cut Path never changes the ground (tested)
+- [x] The Refine Plan's values for a Cut Path win along its strip, and its falloff eases the banks (tested)
+- [x] The Terrain and the `.glb` carry the strip
+- [x] Both pages show Cut Paths
+- Reopen carry-forward for Cut Paths moved to issue 08, which builds Reopen (not yet built when 13 was done)
 - [ ] The long-climb sample is redrafted with the live Agent and passes its Shortcut Check at both Checkpoints, and in the walk view the summit can't be climbed straight up
 
 ## Blocked by

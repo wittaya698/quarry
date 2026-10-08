@@ -10,7 +10,7 @@ from quarry.blockout import Reason
 
 @dataclass(frozen=True)
 class Refinement:
-    surface: str  # "ground", or a Zone's name
+    surface: str  # "ground", a Zone's name, or a Cut Path's, e.g. "camp→summit"
     slope_profile: str  # "linear", "smooth" or "steep"
     falloff_width: float  # metres
     roughness: float  # metres of height noise

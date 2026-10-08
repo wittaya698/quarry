@@ -83,7 +83,20 @@ class FakeAgent:
             )
             for zone in blockout.zones
         )
-        return RefinePlan((ground, *zones)).to_dict()
+        cut_paths = tuple(
+            Refinement(
+                surface=f"{path.start}→{path.end}",
+                slope_profile="smooth",
+                falloff_width=2.0,
+                roughness=0.0,
+                seed=self.seed,
+                vegetation_density=0.0,
+                reason=Reason("ai", "a bare, smooth trail whose banks ease only a little"),
+            )
+            for path in blockout.paths
+            if path.cut
+        )
+        return RefinePlan((ground, *zones, *cut_paths)).to_dict()
 
 def _readings(mood):
     readings = []

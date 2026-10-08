@@ -48,6 +48,8 @@ BLOCKOUT_SCHEMA = _object(
         points={"type": "array", "items": _POINT},
         reason=_REASON,
         decorative={"type": "boolean"},
+        cut={"type": "boolean"},
+        width={"anyOf": [{"type": "number"}, {"type": "null"}]},
     )},
     zones={"type": "array", "items": _object(
         name={"type": "string"},
@@ -80,6 +82,7 @@ Coordinates are metres on the Brief's footprint: x from 0 to width, y from 0 to 
   Waypoint to its end, as a polyline whose first and last points are the two
   Landmarks' positions. Its walk is measured along the ground at the Brief's Walk
   Speed, slope included. Decorative Paths are allowed and never measured.
+  Every Path sets cut and width: cut false and width null for an ordinary Path.
 - Zones are discs on the Ground: dome is a smooth hill, flat a plateau (or a lake,
   with negative height). Combine Mode: add, max or replace. Zones are listed in
   Stacking Order, bottom first.
@@ -117,6 +120,21 @@ Coordinates are metres on the Brief's footprint: x from 0 to width, y from 0 to 
   the whole ground for any faster route a player could walk, climbing only onto
   ground no steeper than the Max Walkable Slope but dropping down any slope. A
   Shortcut is a miss; the Path alone does not stop one.
+- A Cut Path (cut true, width at least 4 m) grades its own strip of ground, above
+  every Zone. Use one where a walk must be forced (a no_shortcut Walk Target) or
+  a trail must be cut into a slope; an ordinary Path never changes the ground.
+  - Each end's Pad is held level at the height the Zones give its Landmark; the
+    strip rises evenly between the two Pads' edges. Its grade is the height gained
+    divided by the Path's length less both pad_radius values; keep it under the
+    Max Walkable Slope.
+  - Its banks are sheer here, wherever the strip sits above or below the Zones,
+    and they count for a max_slope Reading. The Refine Plan eases them later.
+  - To force a climb, make the ground around the strip steeper than the Max
+    Walkable Slope, so a player can't leave the trail and climb straight up: a
+    dome with h / r well above the limits above, steep across its whole flank,
+    with the Cut Path winding round it at its own gentle grade. Keep the turns of
+    a winding Cut Path at least its width apart.
+  - Say in its Reason why it is cut and how wide it is.
 - Where and how big belongs to the Blockout. How the ground looks up close
   (roughness, seed, vegetation, slope profile, falloff) belongs to the Refine
   Plan, which comes later; do not set any of it here.
@@ -139,10 +157,16 @@ You write Refine Plans for Quarry, a terrain-authoring tool. A Refine Plan says
 how each surface of an approved Blockout looks up close; code then builds the
 Terrain from the two, and every Check runs again on that Terrain.
 
-- Refine every surface exactly once: "ground", then each Zone by name.
+- Refine every surface exactly once: "ground", then each Zone by name, then each
+  Cut Path (a Path with cut true) by its start→end name, e.g. "camp→summit".
 - For each give slope_profile (linear, smooth or steep), falloff_width (metres a
   Zone's edge blends over), roughness (metres of height noise), seed (an integer;
   the only randomness in the Terrain) and vegetation_density (0 to 1).
+- A Cut Path's values win along its strip. Keep it smooth (low roughness) so its
+  grade holds underfoot. Its falloff eases its banks outward from the strip's
+  edge; ease them only a little, since a bank eased into a gentle slope lets a
+  player leave the trail and climb straight up, and the Shortcut Check on the
+  Terrain will catch it.
 - Every Refinement carries a Reason: one plain sentence saying why, including how
   it affects each Path it touches, e.g. "kept roughness low where the Path crosses
   so the trail stays smooth underfoot". Roughness and falloff can steepen a Path

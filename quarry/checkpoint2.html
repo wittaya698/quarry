@@ -419,8 +419,10 @@ function renderPlan() {
       }
       if (Object.keys(change).length > 1) act("/api/edit", { revision: state.revision, change });
     };
+    const cut = state.blockout.paths.some((p) => p.cut && `${p.start}→${p.end}` === s.surface);
     return h("div", { class: "surface" },
-      h("div", {}, h("strong", {}, s.surface)), reason(s.reason),
+      h("div", {}, h("strong", {}, s.surface), cut ? h("span", { class: "na" }, " · Cut Path: its values win along the strip; its falloff eases the banks") : ""),
+      reason(s.reason),
       h("div", { class: "grid" }, ...Object.entries(inputs).map(([name, input]) => h("div", {}, h("label", {}, labels[name]), input))),
       h("button", { style: "margin-top:8px", disabled, onclick: apply }, `Apply to ${s.surface}`));
   }));

@@ -32,7 +32,7 @@ def blockout_output():
             {"name": "lighthouse", "position": [268, 200], "reason": ai("on the east point"), "pad_radius": 8, "ai_chosen": False},
         ],
         "paths": [
-            {"start": "spawn", "end": "lighthouse", "points": [[100, 200], [268, 200]], "reason": ai("straight along the ridge"), "decorative": False},
+            {"start": "spawn", "end": "lighthouse", "points": [[100, 200], [268, 200]], "reason": ai("straight along the ridge"), "decorative": False, "cut": False, "width": None},
         ],
         "zones": [
             {"name": "hill", "center": [200, 300], "radius": 50, "height": 6, "profile": "dome", "combine": "add", "reason": ai("a gentle hill off the Path")},
@@ -151,11 +151,31 @@ def test_a_walk_target_without_exactly_one_path_is_rejected(island, output):
 def test_an_ai_chosen_landmark_and_a_decorative_path_are_allowed(island):
     output = blockout_output()
     output["landmarks"].append({"name": "well", "position": [200, 120], "reason": ai("a place to rest"), "pad_radius": 4, "ai_chosen": True})
-    output["paths"].append({"start": "spawn", "end": "well", "points": [[100, 200], [200, 120]], "reason": ai("a side trail"), "decorative": True})
+    output["paths"].append({"start": "spawn", "end": "well", "points": [[100, 200], [200, 120]], "reason": ai("a side trail"), "decorative": True, "cut": False, "width": None})
 
     island.draft(ClaudeAgent(client=FakeLLM(output)))
 
     assert island.current_revision.number == 1
+
+
+def test_a_cut_path_and_its_width_round_trip_into_the_revision(island):
+    output = blockout_output()
+    output["paths"][0].update(cut=True, width=6, reason=ai("a 6 m cut graded evenly along the ridge"))
+
+    island.draft(ClaudeAgent(client=FakeLLM(output)))
+
+    [path] = island.current_revision.blockout.paths
+    assert path.cut and path.width == 6
+    assert type(island.current_revision.blockout).from_dict(island.current_revision.blockout.to_dict()) == island.current_revision.blockout
+
+
+@pytest.mark.parametrize("change, match", [
+    (lambda p: p.update(cut=True, width=3), "at least 4 m"),
+    (lambda p: p.update(cut=True, width=None), "at least 4 m"),
+    (lambda p: p.update(width=6), "only a Cut Path has a width"),
+])
+def test_a_cut_path_needs_a_width_of_at_least_4_m_and_only_a_cut_path_has_one(island, change, match):
+    refused(island, broken(lambda o: change(o["paths"][0])), match)
 
 
 @pytest.mark.parametrize("output", [
@@ -310,3 +330,25 @@ def test_the_latest_terrains_shortcut_misses_are_in_the_next_refine_plans_input(
 
     assert "Shortcut" not in llm.prompt(1)
     assert "Shortcut" in llm.prompt() and "spawn→lighthouse" in llm.prompt()
+
+
+@pytest.fixture
+def approved_with_a_cut(island):
+    output = blockout_output()
+    output["paths"][0].update(cut=True, width=6)
+    island.draft(ClaudeAgent(client=FakeLLM(output)))
+    island.approve(1, by=ALICE, waivers={c.check: "test" for c in island.checks() if not c.passed})
+    return island
+
+
+def test_a_refine_plan_must_refine_each_cut_path_exactly_once(approved_with_a_cut):
+    def cut_refinement(surfaces):
+        surfaces.append({**surfaces[0], "surface": "spawn→lighthouse", "reason": ai("a smooth, bare trail")})
+
+    refused_plan(approved_with_a_cut, refine_output(), "spawn→lighthouse is refined 0 times")
+    refused_plan(approved_with_a_cut, broken_plan(lambda s: (cut_refinement(s), cut_refinement(s))), "spawn→lighthouse is refined 2 times")
+
+    approved_with_a_cut.draft_refine_plan(ClaudeAgent(client=FakeLLM(broken_plan(cut_refinement))))
+
+    surfaces = [s.surface for s in approved_with_a_cut.current_refine_plan.plan.surfaces]
+    assert surfaces == ["ground", "hill", "spawn→lighthouse"]

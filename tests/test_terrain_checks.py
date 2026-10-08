@@ -1,7 +1,11 @@
+import math
+
 import pytest
 
 from quarry.agent import FakeAgent
+from quarry.blockout import Blockout, Landmark, Path, Reason, Zone
 from quarry.brief import Brief
+from quarry.export import read_glb
 from quarry.identity import Human
 from quarry.site import Refused, Site
 
@@ -161,3 +165,80 @@ def test_the_shortcut_check_runs_again_on_the_terrain(forced):
 
     assert not on_terrain.passed and on_terrain.route
     assert on_terrain.measured != on_blockout.measured  # measured on the real ground
+
+
+def spiral_climb():
+    """A 40 m dome too steep to climb (≈38° against 25°), with a Cut Path winding
+    1.5 times round it from camp at its foot to the summit on its crown."""
+    ai = Reason("ai", "test")
+    turns = [(-math.pi / 2 + 3 * math.pi * i / 60, 90 * (1 - i / 60)) for i in range(61)]
+    points = tuple((100 + r * math.cos(a), 100 + r * math.sin(a)) for a, r in turns)
+    return Blockout(
+        landmarks=(Landmark("camp", points[0], ai), Landmark("summit", (100, 100), ai)),
+        paths=(Path("camp", "summit", points, ai, cut=True, width=6),),
+        zones=(Zone("hill", (100, 100), 80, 40, "dome", "add", ai),),
+    )
+
+
+class Drafts:
+    """An Agent that drafts a fixed Blockout, and refines like the fake."""
+
+    def __init__(self, blockout):
+        self.blockout = blockout
+
+    def draft_blockout(self, brief, rejection_note=None, shortcuts=()):
+        return self.blockout.to_dict()
+
+    def draft_refine_plan(self, brief, blockout, rejection_note=None, shortcuts=()):
+        return FakeAgent().draft_refine_plan(brief, blockout)
+
+
+def test_a_cut_path_forces_the_climb_at_both_checkpoints(tmp_path):
+    brief = Brief.from_dict({
+        "footprint": [200, 200], "waypoints": ["camp", "summit"], "max_walkable_slope": 25,
+        "walk_targets": [{"from": "camp", "to": "summit", "time": 300, "tolerance": 0.1, "no_shortcut": True}],
+    })
+    site = Site.create(tmp_path / "spiral", brief)
+    agent = Drafts(spiral_climb())
+    site.draft(agent)
+    on_blockout = by_name(site.checks())
+    site.approve(1, by=ALICE, waivers={c: "test" for c, r in on_blockout.items() if not r.passed})
+    site.draft_refine_plan(agent)
+    on_terrain = by_name(site.terrain_checks())
+
+    for checks in (on_blockout, on_terrain):
+        assert checks["slope camp→summit"].passed, checks["slope camp→summit"].measured
+        assert checks["shortcut camp→summit"].passed, checks["shortcut camp→summit"].measured
+        assert checks["pad summit"].passed and checks["pad camp"].passed
+
+
+def test_a_cut_paths_own_refinement_wins_along_its_strip(tmp_path):
+    site = Site.create(tmp_path / "spiral", Brief.from_dict({"footprint": [200, 200], "waypoints": []}))
+    agent = Drafts(spiral_climb())
+    site.draft(agent)
+    site.approve(1, by=ALICE)
+    site.draft_refine_plan(agent)
+    plan = {s.surface: s for s in site.current_refine_plan.plan.surfaces}
+    terrain = site.terrain()
+
+    # The spiral passes (100, 160) half a turn after camp; (100, 150) is the dome beside it.
+    on_strip, beside = terrain.vegetation[160 // 2][100 // 2], terrain.vegetation[150 // 2][100 // 2]
+    assert on_strip == plan["camp→summit"].vegetation_density
+    assert beside == plan["hill"].vegetation_density != on_strip
+
+
+def test_the_exports_collision_carries_a_cut_paths_strip(tmp_path):
+    site = Site.create(tmp_path / "spiral", Brief.from_dict({"footprint": [200, 200], "waypoints": []}))
+    agent = Drafts(spiral_climb())
+    site.draft(agent)
+    site.approve(1, by=ALICE)
+    site.draft_refine_plan(agent)
+    site.approve_refine_plan(1, by=ALICE)
+    site.export(tmp_path / "spiral.glb")
+
+    collision = {(x, z): y for x, y, z in read_glb(tmp_path / "spiral.glb")["terrain-colonly"].positions}
+    terrain = site.terrain()
+    # On the strip at (100, 160), the trail's graded height, not the dome's.
+    assert collision[(100, 160)] == pytest.approx(terrain.height(100, 160), abs=1e-4)
+    dome = 40 * (1 + math.cos(math.pi * 60 / 80)) / 2  # the hill alone, 60 m from its centre
+    assert abs(collision[(100, 160)] - dome) > 1

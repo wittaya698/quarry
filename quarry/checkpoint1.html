@@ -199,6 +199,14 @@ function renderMap(blockout) {
   });
 
   for (const path of blockout.paths) {
+    // A Cut Path grades its own strip of ground: drawn at its real width, in metres.
+    if (path.cut) {
+      el("polyline", {
+        points: path.points.map(([x, y]) => `${x},${yOf(y)}`).join(" "), fill: "none", class: "cut",
+        stroke: "var(--path)", "stroke-opacity": 0.3, "stroke-width": path.width,
+        "stroke-linecap": "round", "stroke-linejoin": "round",
+      }, svg);
+    }
     el("polyline", {
       points: path.points.map(([x, y]) => `${x},${yOf(y)}`).join(" "), fill: "none",
       stroke: "var(--path)", "stroke-width": 2 * px, "stroke-dasharray": path.decorative ? `${6 * px} ${4 * px}` : "",
@@ -326,7 +334,7 @@ function renderElements(blockout) {
     ...blockout.landmarks.map((l) => item("landmark", l.name,
       `Landmark ${l.ai_chosen ? "★ " : ""}${l.name} · Pad ${l.pad_radius} m${l.ai_chosen ? " · AI-chosen" : ""}`, l.reason)),
     ...blockout.paths.map((p) => item("path", `${p.start}→${p.end}`,
-      `Path ${p.start}→${p.end}${p.decorative ? " · decorative" : ""}`, p.reason)),
+      `Path ${p.start}→${p.end}${p.decorative ? " · decorative" : ""}${p.cut ? ` · Cut Path, ${p.width} m wide` : ""}`, p.reason)),
     ...blockout.zones.map((z, i) => item("zone", z.name,
       `Zone ${i + 1} ${z.name} · ${z.profile} ${z.height} m · r ${z.radius.toFixed(0)} m · ${z.combine}`, z.reason)),
     ...blockout.readings.map((r) => item("reading", r.phrase, `Reading “${r.phrase}” → ${r.meaning}`, r.reason)),
@@ -385,7 +393,9 @@ function renderInspector(blockout) {
         + "than the Max Walkable Slope, but drops down any slope, as a player can."));
   } else {
     const p = blockout.paths.find((p) => `${p.start}→${p.end}` === selected.key);
-    box.replaceChildren(title, h("div", {}, `Path ${selected.key}${p.decorative ? " · decorative, not measured" : ""}`), reason(p.reason));
+    box.replaceChildren(title, h("div", {}, `Path ${selected.key}${p.decorative ? " · decorative, not measured" : ""}`), reason(p.reason),
+      ...(p.cut ? [h("p", { class: "na" }, `Cut Path: grades its own ${p.width} m strip, rising evenly between its Pads. `
+        + "Its banks are sheer until the Refine Plan eases them.")] : []));
   }
 }
 

@@ -18,6 +18,7 @@ Make reversal and plain-language changes work end to end.
 - [ ] Reopen marks the Refine Plan and Terrain Superseded; Export from them is refused, and they remain viewable
 - [ ] A Brief edit after Approval triggers a Reopen
 - [ ] The touched-Zone set is correct for a move, a resize, an overlap gained and an overlap lost (tested)
+- [ ] Cut Paths (issue 13) are carried forward like Zones: one is touched if it was edited or overlaps the edited shape (tested)
 - [ ] Untouched Zones' values are carried verbatim with source Reasons; the carried plan still requires Approval
 - [ ] There is no operation that changes Terrain except through a Blockout or Refine Plan Revision
 - [ ] An Edit Request that the current stage can satisfy yields a new Revision; one that needs a Blockout-owned property at Checkpoint #2 yields "needs Reopen: <property>" and an offer to Reopen (tested with the fake Agent)

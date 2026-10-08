@@ -24,6 +24,8 @@ class Path:
     points: tuple[tuple[float, float], ...]
     reason: Reason
     decorative: bool = False  # drawn for looks; never measured
+    cut: bool = False  # a Cut Path: grades its own strip of ground (ADR-0005)
+    width: float | None = None  # metres across a Cut Path's strip; None unless cut
 
 
 @dataclass(frozen=True)

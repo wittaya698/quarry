@@ -4,7 +4,7 @@ Site's history. A Draft that breaks a rule is refused whole, never repaired.
 from dataclasses import fields
 
 from quarry.blockout import Blockout, Landmark, Path, Reading, Zone
-from quarry.brief import Brief
+from quarry.brief import CORRIDOR, Brief
 from quarry.edits import REFINE_VALUES
 from quarry.refine import RefinePlan, Refinement
 
@@ -28,7 +28,10 @@ _HUMAN_ACTS = {"approval", "approve", "waiver", "waivers", "rejection", "reject"
 _NUMBER = (int, float)
 _BLOCKOUT_SHAPE = {
     "landmarks": {"name": str, "position": "point", "reason": "reason", "pad_radius": _NUMBER, "ai_chosen": bool},
-    "paths": {"start": str, "end": str, "points": "points", "reason": "reason", "decorative": bool},
+    "paths": {
+        "start": str, "end": str, "points": "points", "reason": "reason", "decorative": bool,
+        "cut": bool, "width": (_NUMBER, None),
+    },
     "zones": {
         "name": str, "center": "point", "radius": _NUMBER, "height": _NUMBER,
         "profile": ("dome", "flat"), "combine": ("add", "max", "replace"), "reason": "reason",
@@ -67,6 +70,11 @@ def validate_blockout(brief, output):
         for end in (path["start"], path["end"]):
             if end not in names:
                 raise InvalidDraft(f"malformed output: a Path ends at {end}, which is no Landmark")
+        label = f"Path {path['start']}→{path['end']}"
+        if path["cut"] and not (path["width"] or 0) >= CORRIDOR:
+            raise InvalidDraft(f"{label} is a Cut Path {path['width']} m wide; it needs to be at least {CORRIDOR:g} m")
+        if not path["cut"] and path["width"] is not None:
+            raise InvalidDraft(f"{label} has a width, but only a Cut Path has a width")
     routes = [(p["start"], p["end"]) for p in output["paths"] if not p["decorative"]]
     for t in brief.walk_targets:
         count = routes.count((t.start, t.end))
@@ -83,7 +91,8 @@ def validate_refine_plan(brief, blockout, output):
             if not valid(refinement[field]) or isinstance(refinement[field], bool):
                 raise InvalidDraft(f"malformed output: {field} {_quote(refinement[field])} for {refinement['surface']}")
     _require_reasons(output)
-    surfaces = ["ground", *(z.name for z in blockout.zones)]
+    cut_paths = (f"{p.start}→{p.end}" for p in blockout.paths if p.cut)
+    surfaces = ["ground", *(z.name for z in blockout.zones), *cut_paths]
     refined = [r["surface"] for r in output["surfaces"]]
     for name in refined:
         if name not in surfaces:
