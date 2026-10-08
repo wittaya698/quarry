@@ -5,7 +5,7 @@
   "walk_targets": [
     {"from": "camp", "to": "summit", "time": 600, "tolerance": 0.05, "no_shortcut": true},
     {"from": "camp", "to": "spring", "time": 20, "tolerance": 0.1},
-    {"from": "spring", "to": "summit", "time": 300, "tolerance": 0.1}
+    {"from": "spring", "to": "summit", "time": 600, "tolerance": 0.1}
   ],
   "max_walkable_slope": 25
 }

@@ -128,3 +128,12 @@ Still for the reviewer: do the layouts read as the moods?
 | Terrain (Refine Plan Revision 1) | **1:17**, the same way | pass |
 
 Both Checkpoint pages draw the route as a red dashed line. A Shortcut climbs only onto ground no steeper than the Max Walkable Slope in its steepest direction, so switchbacks across a steep face don't count (decided while building the Check; recorded in ADR-0005). The walk view now obeys the same rule. Closing the Shortcut needs Cut Paths (issue 13).
+
+## Round 4 — long-climb with Cut Paths (issue 13, 2026-10-08)
+
+Site: `.scratch/quarry-mvp/review/sites/round4/long-climb`, drafted live after the Cut Path prompt.
+
+- The AI raised a hill too steep to climb (80 m on a 70 m radius) and wound a 5 m Cut Path almost four times round it, with turns about 15 m apart.
+- **shortcut camp→summit passes:** the fastest walkable route is the trail itself, at 10:01 against the 9:30 floor. Every slope and Pad Check passes.
+- **walk spring→summit misses** (10:19 against 5:00), because the sample Brief contradicts itself. A 5:00 spring→summit would make camp→spring→summit about 5:20, a Shortcut on the forced climb. The AI saw this, routed spring→summit back through camp, and owned the miss in its Reason.
+- Follow-ups: the sample Brief's spring→summit target is now 10:00 ±10%. Issue 15 has the Brief Check refuse such Briefs before drafting. The round4 Site keeps the old Brief, so this miss needs a Waiver.
