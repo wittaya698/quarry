@@ -157,3 +157,12 @@ Site: `.scratch/quarry-mvp/review/sites/round5/long-climb`. The Brief now asks 1
 - The crag is a 150 m dome on an 86 m radius, cut off flat at 80 m.
 - The 8 m Cut Path crosses the meadow from camp on a raised causeway, winds twice round the crag with its loops 16 m apart, and ends in a trench across the flat top.
 - The Reason works out the inside-of-the-bends route (about 580 s), following the new prompt line.
+
+**Reviewer:** approved the Round 5 Blockout (2026-10-09).
+
+**Refine Plan, Round 5 (live). Every Check passes on the Terrain,** shortcut camp→summit included (10:25 against the 9:30 floor).
+- The trail is nearly glass-smooth (roughness 0.03 m), with 1 m bank easing.
+- The crag and the summit top keep `steep` 1 m falloffs, so their cliffs stay sheer.
+- A simulated walker that follows the trail reaches the top without stalling (864 of 867 m).
+
+Still for the reviewer: walk it, and confirm the summit can't be climbed straight up.
