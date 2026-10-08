@@ -57,9 +57,8 @@ def run_checks(brief, blockout, surface=None):
         if target.no_shortcut:
             results.append(_shortcut(brief, blockout, target, ground))
     for path in routes:
-        results.append(
-            _at_most(f"slope {path.start}→{path.end}", "°", brief.max_walkable_slope, _steepest(path.points, ground))
-        )
+        steepest = max(_steepest(path.points, ground), _steepest_ground(path.points, ground))
+        results.append(_at_most(f"slope {path.start}→{path.end}", "°", brief.max_walkable_slope, steepest))
     for landmark in blockout.landmarks:
         results.append(_at_most(f"pad {landmark.name}", "°", PAD_MAX_SLOPE, _steepest_on_pad(landmark, ground)))
     measures = {"max_slope": ("°", _steepest_anywhere), "max_height": ("m", _highest)}
@@ -168,15 +167,33 @@ def _steepest(points, ground):
     return max((math.degrees(math.atan2(abs(rise), run)) for run, rise in _steps(points, ground)), default=0.0)
 
 
-def _steps(points, ground):
-    """(map distance, height change) for each short step along a polyline."""
+def _steepest_ground(points, ground):
+    """The ground's own steepest slope anywhere along the Path, as a Shortcut
+    judges it, so a gentle traverse across a face too steep to walk misses.
+    Both ways: a Path is walked back, too."""
+    h = _ROUTE_GRID
+    steepest = 0.0
+    for x, y in _samples(points):
+        dx = (ground.height(x + h, y) - ground.height(x - h, y)) / (2 * h)
+        dy = (ground.height(x, y + h) - ground.height(x, y - h)) / (2 * h)
+        steepest = max(steepest, math.degrees(math.atan(math.hypot(dx, dy))))
+    return steepest
+
+
+def _samples(points):
+    """Points every _STEP or less along a polyline, its ends included."""
+    yield points[0]
     for a, b in zip(points, points[1:]):
         count = max(1, math.ceil(math.dist(a, b) / _STEP))
-        previous = a
         for i in range(1, count + 1):
-            here = (a[0] + (b[0] - a[0]) * i / count, a[1] + (b[1] - a[1]) * i / count)
-            yield math.dist(previous, here), ground.height(*here) - ground.height(*previous)
-            previous = here
+            yield a[0] + (b[0] - a[0]) * i / count, a[1] + (b[1] - a[1]) * i / count
+
+
+def _steps(points, ground):
+    """(map distance, height change) for each short step along a polyline."""
+    samples = list(_samples(points))
+    for previous, here in zip(samples, samples[1:]):
+        yield math.dist(previous, here), ground.height(*here) - ground.height(*previous)
 
 
 def _grid(footprint, ground):

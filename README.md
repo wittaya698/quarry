@@ -217,4 +217,4 @@ The MVP is planned as sixteen vertical slices in [.scratch/quarry-mvp/issues/](.
 13. ✅ Cut Paths: a Path can grade its own strip of ground, to force a route up a steep hill (blocks 7)
 14. ✅ Pad blend: flattening a Pad never steepens the ground around it (blocks 7)
 15. ✅ Brief Check: refuse a Brief whose other Walk Targets undercut a forced walk
-16. Path slope Check judges the ground's slope too, like the Shortcut Check
+16. ✅ Path slope Check judges the ground's slope too, like the Shortcut Check

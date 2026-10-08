@@ -182,3 +182,21 @@ Beyond a Pad, the Terrain Builder now eases out the *correction* (the Pad's leve
 Every other review Site's Terrain Checks keep the same results; the measures move by hundredths. One exception improves: Round 5 long-climb's trail eases from 11.4° to 9.4°.
 
 **Reviewer, Refine Plans (2026-10-09):** accepted the Round 3 Refine Plans for cozy-forest, coastal-cliffs and tight-courtyard. With long-climb's Round 5, every sample's Draft is accepted as a reasonable starting point.
+
+## Issue 16 — Path slope Check judges the ground (2026-10-09)
+
+The slope Check now reports the steeper of the Path's own climb and the ground's steepest slope along it, both ways.
+
+**Only one Site changes result:** Round 2 long-climb, never approved. spring→summit (16.2°) and camp→summit (11.3°) now miss at 33.9° against 25°: they wind gently across a dome face too steep to walk.
+
+Every approved Site keeps its results. Measures that rise, all still under their limits:
+
+| Site | Checked on | Path | before | after | limit |
+|---|---|---|---|---|---|
+| round3/long-climb | Blockout | spring→summit, camp→summit | 11.7° | 21.4° | 25° |
+| round3/long-climb | Terrain | spring→summit, camp→summit | 11.9° | 21.9° | 25° |
+| round4/long-climb | Blockout | spring→summit, camp→summit | 5.5° | 7.4° | 25° |
+| round4/long-climb | Terrain | spring→summit, camp→summit | 12.6° | 21.3° | 25° |
+| round5/long-climb | Blockout | spring→summit, camp→summit | 5.3° | 7.9° | 25° |
+
+Round 4's Terrain rise is the 5 m trail borrowing height from its banks, the reason for the 8 m minimum. Round 5's Terrain trail stays at 9.4°.

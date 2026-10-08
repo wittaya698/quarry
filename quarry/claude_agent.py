@@ -95,6 +95,9 @@ Coordinates are metres on the Brief's footprint: x from 0 to width, y from 0 to 
   angle. Code measures those on the Terrain afterwards, and a number you guessed
   will be wrong. A length or walk time you worked out from a Path's points is fine.
 - Keep every measured Path under the Max Walkable Slope, and keep Pads off slopes.
+  A Path's slope is the steeper of its own climb and the ground's steepest slope
+  beneath it, so a gentle Path winding across a face too steep to walk misses;
+  only a Cut Path's level strip can cross such ground.
   The ground is built exactly as below, and code measures it; plan with it:
   - A dome Zone of height h and radius r stands h * (1 + cos(pi * d / r)) / 2
     above what lies beneath, at distance d from its center. It is steepest halfway

@@ -90,6 +90,32 @@ def test_a_path_steeper_than_the_max_walkable_slope_misses():
     assert math.isclose(steep.measured, 35) and not steep.passed
 
 
+def test_a_path_that_climbs_gently_across_a_face_too_steep_to_walk_misses():
+    brief, _ = straight(200, {"time": 143, "tolerance": 0.1})
+    across = Blockout(  # 10 m up the 35° face over 200 m across it: about a 2° climb
+        landmarks=(Landmark("spawn", (100, 0), AI), Landmark("lighthouse", (110, 200), AI)),
+        paths=(Path("spawn", "lighthouse", ((100, 0), (110, 200)), AI),),
+    )
+
+    slope = by_name(run_checks(brief, across, Incline(35)))["slope spawn→lighthouse"]
+
+    assert math.isclose(slope.measured, 35)  # the ground's slope, not the Path's 2°
+    assert not slope.passed
+
+
+def test_a_cut_path_up_a_face_too_steep_to_walk_still_passes():
+    brief, _ = straight(90, {"time": 65, "tolerance": 0.1})
+    landmarks = (Landmark("spawn", (100, 10), AI), Landmark("lighthouse", (100, 100), AI))
+    dome = Zone("hill", (100, 100), 80, 30, "dome", "add", AI)  # steepest ≈ atan(1.57 × 30 / 80) ≈ 30.5°
+    cut = Path("spawn", "lighthouse", ((100, 10), (100, 100)), AI, cut=True, width=8)
+    brief = replace(brief, max_walkable_slope=25)
+
+    slope = by_name(run_checks(brief, Blockout(landmarks, (cut,), (dome,))))["slope spawn→lighthouse"]
+
+    assert slope.passed  # level across its strip, so only its own 30 m over 78 m counts
+    assert math.isclose(slope.measured, math.degrees(math.atan(30 / 78)), abs_tol=0.01)
+
+
 def test_a_measurable_reading_becomes_a_check_and_an_unmeasurable_one_does_not():
     brief, blockout = straight(140, {"time": 100, "tolerance": 0.1})
     gentle = Reading("gentle hills", "no slope steeper than 15°", "max_slope", 15, AI)

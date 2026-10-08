@@ -31,7 +31,7 @@ The player's walking pace that converts a walk time into a distance along a path
 _Avoid_: Movement speed, velocity
 
 **Max Walkable Slope**:
-The steepest incline a player is meant to walk, which every measured **Path** must stay under.
+The steepest incline a player is meant to walk, which every measured **Path** must stay under in both directions — both its own climb and the slope of the ground it crosses, so a gentle line across a face too steep to walk does not count as walkable.
 _Avoid_: Slope limit, max grade, climb angle
 
 **Brief Check**:
