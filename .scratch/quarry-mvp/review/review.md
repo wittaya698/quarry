@@ -117,3 +117,14 @@ Still for the reviewer: do the layouts read as the moods?
 - On the Terrain, a straight line from camp to the summit is walkable: its steepest point is 21.1° against the 25° limit, and it takes 74 s against the 10:00 target.
 - The Blockout has no way to prevent this. A hill steep enough to block the climb would also block the spiral Path, because Zones are discs and a Path doesn't shape the ground.
 - Fixing it needs a design change, not just a prompt change.
+
+## Shortcut Check on long-climb (issue 12, 2026-10-08)
+
+`examples/briefs/long-climb.json` now marks camp→summit no Shortcut. The approved Round 3 Blockout, checked against it (on a copy of the Site, with the new Brief), misses:
+
+| Measured on | shortcut camp→summit | every other Check |
+|---|---|---|
+| Blockout | **1:17** against ≥ 9:30, straight from camp up the hill to the summit | pass |
+| Terrain (Refine Plan Revision 1) | **1:17**, the same way | pass |
+
+Both Checkpoint pages draw the route as a red dashed line. A Shortcut climbs only onto ground no steeper than the Max Walkable Slope in its steepest direction, so switchbacks across a steep face don't count (decided while building the Check; recorded in ADR-0005). The walk view now obeys the same rule. Closing the Shortcut needs Cut Paths (issue 13).

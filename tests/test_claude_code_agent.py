@@ -14,7 +14,7 @@ from quarry.claude_code_agent import ClaudeCodeAgent
 from quarry.identity import Human
 from quarry.site import Site
 from quarry.validation import InvalidDraft
-from test_agent import ISLAND, blockout_output, refine_output
+from test_agent import FORCED, ISLAND, blockout_output, refine_output
 
 ALICE = Human("alice")
 
@@ -232,3 +232,16 @@ def test_the_cli_drafts_on_the_subscription_by_default_even_with_an_api_key_set(
 
     assert called.read_text() == str(home / ".quarry" / "claude-code")
     assert Site.open(site).current_revision.number == 1
+
+
+def test_the_latest_shortcut_misses_are_in_the_next_drafts_input(tmp_path, profile):
+    forced = Site.create(tmp_path / "forced", Brief.from_dict(FORCED))
+    claude = FakeClaude(drafted(blockout_output()), drafted(blockout_output()))
+    agent = ClaudeCodeAgent(run=claude, profile=profile)
+    forced.draft(agent)
+
+    forced.draft(agent)
+
+    [first, latest] = [options["input"] for _, options in claude.drafts]
+    assert "Shortcut" not in first
+    assert "Shortcut" in latest and "(268, 200)" in latest

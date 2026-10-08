@@ -126,3 +126,38 @@ def test_a_path_that_passed_on_the_blockout_misses_once_refining_makes_it_steepe
     assert not on_terrain[path].passed
     assert on_terrain["walk spawn→lighthouse"].measured > by_name(refining.checks())["walk spawn→lighthouse"].measured
     assert all(on_terrain[f"pad {name}"].passed for name in ISLAND["waypoints"])  # still flattened
+
+
+FORCED = {**ISLAND, "walk_targets": [{"from": "spawn", "to": "lighthouse", "time": 600, "no_shortcut": True}]}
+FORCED_WAIVERS = {
+    "walk spawn→lighthouse": "the straight Path is short",
+    "shortcut spawn→lighthouse": "the straight line is the way",
+}
+
+
+@pytest.fixture
+def forced(tmp_path):
+    """A Site whose one walk is forced: the fake's straight Path is itself a Shortcut."""
+    site = Site.create(tmp_path / "forced", Brief.from_dict(FORCED))
+    site.draft(FakeAgent())
+    return site
+
+
+def test_a_shortcut_miss_blocks_approval_without_a_waiver(forced):
+    shortcut = by_name(forced.checks())["shortcut spawn→lighthouse"]
+    assert not shortcut.passed and shortcut.route
+
+    with pytest.raises(Refused, match="shortcut spawn→lighthouse"):
+        forced.approve(1, by=ALICE, waivers={"walk spawn→lighthouse": "the straight Path is short"})
+    forced.approve(1, by=ALICE, waivers=FORCED_WAIVERS)
+
+
+def test_the_shortcut_check_runs_again_on_the_terrain(forced):
+    forced.approve(1, by=ALICE, waivers=FORCED_WAIVERS)
+    forced.draft_refine_plan(FakeAgent())
+
+    on_blockout = by_name(forced.checks())["shortcut spawn→lighthouse"]
+    on_terrain = by_name(forced.terrain_checks())["shortcut spawn→lighthouse"]
+
+    assert not on_terrain.passed and on_terrain.route
+    assert on_terrain.measured != on_blockout.measured  # measured on the real ground

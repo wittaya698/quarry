@@ -23,7 +23,7 @@ A desired walking time or distance between two **Waypoints**, with a tolerance; 
 _Avoid_: Distance constraint, travel time
 
 **Shortcut**:
-A walkable route from a **Walk Target**'s first **Waypoint** to its second that is faster than the **Walk Target** allows, found anywhere on the ground rather than along the **Path**; walkable means never climbing steeper than the **Max Walkable Slope**, though it may drop down any slope, as a player can.
+A walkable route from a **Walk Target**'s first **Waypoint** to its second that is faster than the **Walk Target** allows, found anywhere on the ground rather than along the **Path**; walkable means never climbing onto ground steeper than the **Max Walkable Slope** in its steepest direction, so switchbacks across a steep face do not climb it, though it may drop down any slope, as a player can.
 _Avoid_: Bypass, cheat, skip
 
 **Walk Speed**:

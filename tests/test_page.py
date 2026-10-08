@@ -1,4 +1,5 @@
 import json
+import math
 import threading
 import urllib.error
 import urllib.request
@@ -232,3 +233,25 @@ def test_at_checkpoint_2_the_walkable_preview_page_is_served(terrain_page):
         html = response.read().decode()
 
     assert "Checkpoint #2" in html
+
+
+def test_the_page_state_carries_a_missed_shortcuts_route_and_nothing_for_a_pass(tmp_path):
+    # The fake's straight Paths take about 2:45: fine for 3 minutes, far too fast for 10.
+    forced = {**ISLAND, "walk_targets": [
+        {"from": "spawn", "to": "lighthouse", "time": 180, "tolerance": 0.1, "no_shortcut": True},
+        {"from": "spawn", "to": "village", "time": 600, "tolerance": 0.1, "no_shortcut": True},
+    ]}
+    site = Site.create(tmp_path / "forced", Brief.from_dict(forced))
+    site.draft(FakeAgent())
+    server = running(site, ALICE)
+    try:
+        _, state = call(server, "/api/state")
+    finally:
+        server.shutdown()
+
+    checks = {c["check"]: c for c in state["checks"]}
+    held, leaked = checks["shortcut spawn→lighthouse"], checks["shortcut spawn→village"]
+    assert held["passed"] and held["route"] is None
+    assert not leaked["passed"] and leaked["at_least"]
+    spawn = next(l["position"] for l in state["blockout"]["landmarks"] if l["name"] == "spawn")
+    assert len(leaked["route"]) >= 2 and math.dist(leaked["route"][0], spawn) < 1.5

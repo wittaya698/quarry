@@ -82,7 +82,7 @@ class Fixed:
     def __init__(self, blockout):
         self.blockout = blockout
 
-    def draft_blockout(self, brief, rejection_note=None):
+    def draft_blockout(self, brief, rejection_note=None, shortcuts=()):
         return self.blockout.to_dict()
 
 

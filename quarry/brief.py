@@ -14,6 +14,7 @@ class WalkTarget:
     time: float | None  # seconds; exactly one of time and distance is set
     distance: float | None  # metres
     tolerance: float  # fraction of the target, e.g. 0.1 for ±10%
+    no_shortcut: bool = False  # no faster walkable route may exist anywhere on the ground
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,8 @@ class Brief:
         for t in self.walk_targets:
             target = {"from": t.start, "to": t.end, "tolerance": t.tolerance}
             target.update({"time": t.time} if t.time is not None else {"distance": t.distance})
+            if t.no_shortcut:
+                target["no_shortcut"] = True
             targets.append(target)
         return {
             "footprint": list(self.footprint),
@@ -51,7 +54,8 @@ class Brief:
             waypoints=tuple(data["waypoints"]),
             walk_targets=tuple(
                 WalkTarget(
-                    t["from"], t["to"], t.get("time"), t.get("distance"), t.get("tolerance", 0.1)
+                    t["from"], t["to"], t.get("time"), t.get("distance"), t.get("tolerance", 0.1),
+                    t.get("no_shortcut", False),
                 )
                 for t in data.get("walk_targets", [])
             ),

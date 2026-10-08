@@ -3,8 +3,11 @@
 An Agent has two operations, each returning its Draft as plain data (the shape
 of `to_dict`), never as a trusted object:
 
-    draft_blockout(brief, rejection_note=None)
-    draft_refine_plan(brief, blockout, rejection_note=None)
+    draft_blockout(brief, rejection_note=None, shortcuts=())
+    draft_refine_plan(brief, blockout, rejection_note=None, shortcuts=())
+
+`shortcuts` are the latest Revision's missed Shortcut Checks, each carrying the
+route that leaked, so the next Draft can see where to close it.
 
 The Site passes every output through `quarry.validation` before keeping it. An
 Agent is handed a Brief and a Blockout, never the Site, so it has no way to
@@ -32,7 +35,7 @@ class FakeAgent:
     def __init__(self, seed=1):
         self.seed = seed
 
-    def draft_blockout(self, brief, rejection_note=None):
+    def draft_blockout(self, brief, rejection_note=None, shortcuts=()):
         width, depth = brief.footprint
         radius = min(width, depth) / 3
         landmarks = {}
@@ -58,7 +61,7 @@ class FakeAgent:
         blockout = Blockout(tuple(landmarks.values()), paths, (rise,), _readings(brief.mood))
         return _own_misses(brief, blockout).to_dict()
 
-    def draft_refine_plan(self, brief, blockout, rejection_note=None):
+    def draft_refine_plan(self, brief, blockout, rejection_note=None, shortcuts=()):
         ground = Refinement(
             surface="ground",
             slope_profile="smooth",

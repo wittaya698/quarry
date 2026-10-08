@@ -41,6 +41,8 @@
   .pass { color: var(--pass); font-weight: 600; }
   .miss { color: var(--miss); font-weight: 600; }
   .waived { color: var(--waived); font-weight: 600; }
+  tr.route { cursor: pointer; }
+  tr.route.selected { background: color-mix(in srgb, var(--miss) 10%, transparent); }
   .na { color: var(--muted); }
   .reason { color: var(--muted); font-size: 12px; }
   .reason.human { color: var(--human); }
@@ -134,6 +136,7 @@ const h = (tag, attrs = {}, ...children) => {
 const reason = (r) => h("div", { class: `reason ${r.author}` }, `${r.author === "human" ? "you" : "AI"}: ${r.text}`);
 
 function amount(value, unit) {
+  if (value === null) return "no walkable route";
   if (unit === "s") {
     const total = Math.round(value);
     return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
@@ -201,6 +204,18 @@ function renderMap(blockout) {
       stroke: "var(--path)", "stroke-width": 2 * px, "stroke-dasharray": path.decorative ? `${6 * px} ${4 * px}` : "",
       "stroke-linecap": "round",
     }, svg);
+  }
+
+  // A missed Shortcut: the faster way round that a player could walk.
+  for (const c of state.checks.filter((c) => c.route)) {
+    const isSelected = selected && selected.kind === "shortcut" && selected.key === c.check;
+    const line = el("polyline", {
+      points: c.route.map(([x, y]) => `${x},${yOf(y)}`).join(" "), fill: "none", class: "shortcut",
+      stroke: "var(--miss)", "stroke-width": (isSelected ? 4 : 2.5) * px, "stroke-opacity": isSelected ? 1 : 0.75,
+      "stroke-dasharray": `${6 * px} ${4 * px}`, "stroke-linecap": "round", "stroke-linejoin": "round",
+    }, svg);
+    el("title", {}, line).textContent = `${c.check}: ${amount(c.measured, c.unit)}`;
+    line.addEventListener("pointerdown", (e) => { e.stopPropagation(); selected = { kind: "shortcut", key: c.check }; render(); });
   }
 
   for (const landmark of blockout.landmarks) {
@@ -282,8 +297,15 @@ function renderChecks(blockout) {
   const rows = state.checks.map((c) => {
     const waived = state.waivers && c.check in state.waivers;
     const mark = c.passed ? ["pass", "pass"] : waived ? ["waived", "waived"] : ["miss", "MISS"];
-    const goal = c.at_most ? `≤ ${amount(c.target, c.unit)}` : `${amount(c.target, c.unit)} ±${Math.round(c.tolerance * 100)}%`;
-    return h("tr", {}, h("td", { class: mark[0] }, mark[1]), h("td", {}, c.check),
+    const goal = c.at_most ? `≤ ${amount(c.target, c.unit)}`
+      : c.at_least ? `≥ ${amount(c.target * (1 - c.tolerance), c.unit)}`
+      : `${amount(c.target, c.unit)} ±${Math.round(c.tolerance * 100)}%`;
+    const shown = c.route && selected && selected.kind === "shortcut" && selected.key === c.check;
+    const attrs = c.route
+      ? { class: `route${shown ? " selected" : ""}`, title: "Show this Shortcut on the map",
+          onclick: () => { selected = { kind: "shortcut", key: c.check }; render(); } }
+      : {};
+    return h("tr", attrs, h("td", { class: mark[0] }, mark[1]), h("td", {}, c.check),
       h("td", {}, amount(c.measured, c.unit)), h("td", { class: "na" }, goal));
   });
   for (const r of blockout.readings.filter((r) => r.measure === null)) {
@@ -354,6 +376,13 @@ function renderInspector(blockout) {
     const l = blockout.landmarks.find((l) => l.name === selected.key);
     box.replaceChildren(title, h("div", {}, `Landmark ${l.ai_chosen ? "★ " : ""}${l.name} at (${l.position.map((v) => v.toFixed(0)).join(", ")})`),
       reason(l.reason), h("p", { class: "na" }, `Pad radius ${l.pad_radius} m. Drag it on the map to move it.`));
+  } else if (selected.kind === "shortcut") {
+    const c = state.checks.find((c) => c.check === selected.key && c.route);
+    if (!c) { selected = null; return renderInspector(blockout); }
+    box.replaceChildren(title, h("div", {}, `Shortcut ${c.check.replace("shortcut ", "")}`),
+      h("p", { class: "na" }, `The red dashed line can be walked in ${amount(c.measured, c.unit)}, faster than the `
+        + `${amount(c.target * (1 - c.tolerance), c.unit)} this walk must take at least. It never climbs ground steeper `
+        + "than the Max Walkable Slope, but drops down any slope, as a player can."));
   } else {
     const p = blockout.paths.find((p) => `${p.start}→${p.end}` === selected.key);
     box.replaceChildren(title, h("div", {}, `Path ${selected.key}${p.decorative ? " · decorative, not measured" : ""}`), reason(p.reason));

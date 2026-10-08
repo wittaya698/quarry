@@ -113,6 +113,10 @@ Coordinates are metres on the Brief's footprint: x from 0 to width, y from 0 to 
     ceiling only if your own Zones stay under it; otherwise leave it unmeasured.
 - If you cannot meet a Walk Target, still deliver the Blockout and say so in that
   Path's Reason. Never change the Brief's targets.
+- A Walk Target marked no_shortcut is also checked for Shortcuts: code searches
+  the whole ground for any faster route a player could walk, climbing only onto
+  ground no steeper than the Max Walkable Slope but dropping down any slope. A
+  Shortcut is a miss; the Path alone does not stop one.
 - Where and how big belongs to the Blockout. How the ground looks up close
   (roughness, seed, vegetation, slope profile, falloff) belongs to the Refine
   Plan, which comes later; do not set any of it here.
@@ -156,23 +160,47 @@ class ClaudeDrafter:
     """What every Claude adapter shares: the prompts and the schemas. Each
     adapter supplies only `_ask`, which reaches the model its own way."""
 
-    def draft_blockout(self, brief, rejection_note=None):
+    def draft_blockout(self, brief, rejection_note=None, shortcuts=()):
         prompt = f"The Brief:\n{json.dumps(brief.to_dict(), indent=2)}"
+        if shortcuts:
+            prompt += f"\n\nThe last Blockout {_shortcuts_text(shortcuts)}\nDraft one that closes them."
         if rejection_note:
             prompt += f"\n\nThe human rejected the last Blockout, saying:\n{rejection_note}\nDraft a fresh one that answers this."
         return self._ask(BLOCKOUT_SYSTEM, prompt, BLOCKOUT_SCHEMA)
 
-    def draft_refine_plan(self, brief, blockout, rejection_note=None):
+    def draft_refine_plan(self, brief, blockout, rejection_note=None, shortcuts=()):
         prompt = (
             f"The Brief:\n{json.dumps(brief.to_dict(), indent=2)}\n\n"
             f"The approved Blockout:\n{json.dumps(blockout.to_dict(), indent=2)}"
         )
+        if shortcuts:
+            prompt += f"\n\nThe Terrain of the last Refine Plan {_shortcuts_text(shortcuts)}\nWrite one that closes them."
         if rejection_note:
             prompt += f"\n\nThe human rejected the last Refine Plan, saying:\n{rejection_note}\nWrite a fresh one that answers this."
         return self._ask(REFINE_PLAN_SYSTEM, prompt, REFINE_PLAN_SCHEMA)
 
     def _ask(self, system, prompt, schema):
         raise NotImplementedError
+
+
+def _shortcuts_text(shortcuts):
+    """Missed Shortcut Checks in words: how fast each leak is, against what, and where."""
+    lines = ["left Shortcuts round walks the Brief marks no_shortcut. A player can walk "
+             "each of these routes faster than its Walk Target allows:"]
+    for miss in shortcuts:
+        walk = miss.check.removeprefix("shortcut ")
+        route = " → ".join(f"({x:.0f}, {y:.0f})" for x, y in miss.route)
+        lines.append(
+            f"- {walk}: {_amount(miss.measured, miss.unit)} against "
+            f"{_amount(miss.target, miss.unit)} ±{miss.tolerance:.0%}, by {route}"
+        )
+    return "\n".join(lines)
+
+
+def _amount(value, unit):
+    if unit == "s":
+        return f"{int(value // 60)}:{round(value % 60):02d}"
+    return f"{value:.0f} {unit}"
 
 
 class ClaudeAgent(ClaudeDrafter):

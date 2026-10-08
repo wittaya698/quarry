@@ -60,7 +60,7 @@ class FakeLLM:
         return SimpleNamespace(stop_reason=self.stop_reason, content=[SimpleNamespace(type="text", text=text)])
 
     def prompt(self, index=-1):
-        return json.dumps(self.requests[index]["messages"])
+        return json.dumps(self.requests[index]["messages"], ensure_ascii=False)
 
 
 @pytest.fixture
@@ -274,3 +274,39 @@ def test_a_draft_the_model_did_not_finish_is_rejected(island, stop_reason):
     with pytest.raises(InvalidDraft, match=f"stopped early \\({stop_reason}\\)"):
         island.draft(ClaudeAgent(client=llm))
     assert island.current_revision is None
+
+
+# The model's straight 168 m Path takes 2:00, far under a forced 10-minute walk:
+# both the Path and the straight line beside it are Shortcuts.
+FORCED = {**ISLAND, "walk_targets": [{"from": "spawn", "to": "lighthouse", "time": 600, "tolerance": 0.1, "no_shortcut": True}]}
+FORCED_WAIVERS = {"walk spawn→lighthouse": "short on purpose", "shortcut spawn→lighthouse": "open ground"}
+
+
+@pytest.fixture
+def forced(tmp_path):
+    return Site.create(tmp_path / "forced", Brief.from_dict(FORCED))
+
+
+def test_the_latest_blockouts_shortcut_misses_are_in_the_next_drafts_input(forced):
+    llm = FakeLLM(blockout_output(), blockout_output())
+    forced.draft(ClaudeAgent(client=llm))
+
+    forced.draft(ClaudeAgent(client=llm))
+
+    assert "Shortcut" not in llm.prompt(0)
+    latest = llm.prompt()
+    assert "spawn→lighthouse" in latest and "Shortcut" in latest
+    assert "2:0" in latest and "10:00" in latest  # how fast, against what
+    assert "(100, 200)" in latest and "(268, 200)" in latest  # the route, from spawn to the lighthouse
+
+
+def test_the_latest_terrains_shortcut_misses_are_in_the_next_refine_plans_input(forced):
+    llm = FakeLLM(blockout_output(), refine_output(), refine_output())
+    forced.draft(ClaudeAgent(client=llm))
+    forced.approve(1, by=ALICE, waivers=FORCED_WAIVERS)
+    forced.draft_refine_plan(ClaudeAgent(client=llm))
+
+    forced.draft_refine_plan(ClaudeAgent(client=llm))
+
+    assert "Shortcut" not in llm.prompt(1)
+    assert "Shortcut" in llm.prompt() and "spawn→lighthouse" in llm.prompt()

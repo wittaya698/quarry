@@ -157,7 +157,8 @@ class Site:
         problems = self.brief_problems()
         if problems:
             raise Refused(f"the Brief fails the Brief Check: {'; '.join(problems)}")
-        output = agent.draft_blockout(self.brief, rejection_note=_latest_note(self.rejections))
+        shortcuts = _shortcut_misses(self.checks()) if self.current_revision else ()
+        output = agent.draft_blockout(self.brief, rejection_note=_latest_note(self.rejections), shortcuts=shortcuts)
         self._append(self._blockout, validate_blockout(self.brief, output))
 
     def edit(self, number, change, by):
@@ -199,7 +200,8 @@ class Site:
             raise Refused("a Refine Plan needs an approved Blockout")
         blockout = self.revision(self.approval.revision).blockout
         note = _latest_note(self.refine_plan_rejections)
-        output = agent.draft_refine_plan(self.brief, blockout, rejection_note=note)
+        shortcuts = _shortcut_misses(self.terrain_checks()) if self.current_refine_plan else ()
+        output = agent.draft_refine_plan(self.brief, blockout, rejection_note=note, shortcuts=shortcuts)
         self._append(self._refine, validate_refine_plan(self.brief, blockout, output))
 
     @property
@@ -317,6 +319,11 @@ class Site:
 def _latest_note(rejections):
     """The newest Rejection's note, which the next Draft is asked to answer."""
     return rejections[-1].note if rejections else None
+
+
+def _shortcut_misses(checks):
+    """The latest Revision's missed Shortcut Checks, which the next Draft is shown."""
+    return tuple(r for r in checks if r.route is not None)
 
 
 def _require_human(caller, act):

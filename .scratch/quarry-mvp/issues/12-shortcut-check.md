@@ -19,14 +19,14 @@ A Brief can mark a Walk Target **no Shortcut**. For every such Walk Target, a ne
 
 ## Acceptance criteria
 
-- [ ] The Brief reads and writes `"no_shortcut": true` on a Walk Target, defaulting to false
-- [ ] A `shortcut A→B` Check runs for each no-Shortcut Walk Target and for no other, on the Blockout and on the Terrain
-- [ ] It misses when a walkable route is faster than the Walk Target's lower tolerance, and passes when none is (tested on a hill walkable straight up, and on one that isn't)
-- [ ] Steep drops are walkable and steep climbs are not (tested both ways on the same cliff)
-- [ ] A miss carries the route; both Checkpoint pages draw it, and nothing is drawn on a pass
-- [ ] Shortcut misses reach the next Draft's input for both Claude adapters
-- [ ] A Shortcut miss blocks Approval without a Waiver, like any Check
-- [ ] `examples/briefs/long-climb.json` marks camp→summit no Shortcut, and the approved Round 3 long-climb Blockout now misses it with a route up the hill
+- [x] The Brief reads and writes `"no_shortcut": true` on a Walk Target, defaulting to false
+- [x] A `shortcut A→B` Check runs for each no-Shortcut Walk Target and for no other, on the Blockout and on the Terrain
+- [x] It misses when a walkable route is faster than the Walk Target's lower tolerance, and passes when none is (tested on a hill walkable straight up, and on one that isn't)
+- [x] Steep drops are walkable and steep climbs are not (tested both ways on the same cliff)
+- [x] A miss carries the route; both Checkpoint pages draw it, and nothing is drawn on a pass
+- [x] Shortcut misses reach the next Draft's input for both Claude adapters
+- [x] A Shortcut miss blocks Approval without a Waiver, like any Check
+- [x] `examples/briefs/long-climb.json` marks camp→summit no Shortcut, and the approved Round 3 long-climb Blockout now misses it with a route up the hill
 
 ## Blocked by
 

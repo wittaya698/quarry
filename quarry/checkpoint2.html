@@ -40,6 +40,8 @@
   tr:first-child td { border-top: 0; }
   .pass { color: var(--pass); font-weight: 600; }
   .miss { color: var(--miss); font-weight: 600; }
+  tr.route { cursor: pointer; }
+  tr.route.selected { background: color-mix(in srgb, var(--miss) 10%, transparent); }
   .waived { color: var(--waived); font-weight: 600; }
   .na { color: var(--muted); }
   .reason { color: var(--muted); font-size: 12px; }
@@ -70,7 +72,7 @@
 <main>
   <div class="stage">
     <div class="view" id="view"><div class="hud" id="hud"></div></div>
-    <p class="hint">Click the view to walk: W A S D to move at the Brief's Walk Speed (hold Shift for 10×), the mouse to look, Esc to let go. You can't climb anything steeper than the Max Walkable Slope or leave the footprint. Press O for an overview from above. Blue rings are Pads, and white lines are Paths.</p>
+    <p class="hint">Click the view to walk: W A S D to move at the Brief's Walk Speed (hold Shift for 10×), the mouse to look, Esc to let go. You can't climb anything steeper than the Max Walkable Slope or leave the footprint. Press O for an overview from above. Blue rings are Pads, white lines are Paths, and red dashed lines are Shortcuts: click one in the Checks to see it from above.</p>
   </div>
   <aside>
     <section class="error" id="error"></section>
@@ -124,6 +126,7 @@ const h = (tag, attrs = {}, ...children) => {
 const reason = (r) => h("div", { class: `reason ${r.author}` }, `${r.author === "human" ? "you" : "AI"}: ${r.text}`);
 
 function amount(value, unit) {
+  if (value === null) return "no walkable route";
   if (unit === "s") {
     const total = Math.round(value);
     return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
@@ -163,6 +166,7 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.6);
 sun.position.set(-200, 300, -100);
 scene.add(sun);
 let world = null;
+let selectedShortcut = null; // the Check whose route is highlighted
 
 function resize() {
   const { clientWidth: w, clientHeight: hgt } = view;
@@ -226,6 +230,26 @@ function buildWorld() {
       new THREE.LineBasicMaterial({ color: path.decorative ? 0xdddddd : 0xffffff }));
     world.add(line);
   }
+  // A missed Shortcut: the faster way round that a player could walk.
+  for (const c of state.checks.filter((c) => c.route)) {
+    const shown = c.check === selectedShortcut;
+    const points = [];
+    for (let i = 0; i < c.route.length - 1; i++) {
+      const [ax, ay] = c.route[i], [bx, by] = c.route[i + 1];
+      const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay)));
+      for (let s = 0; s < steps; s++) {
+        const x = ax + (bx - ax) * s / steps, y = ay + (by - ay) * s / steps;
+        points.push(toScene(x, y, heightAt(x, y) + (shown ? 0.5 : 0.3)));
+      }
+    }
+    const [ex, ey] = c.route[c.route.length - 1];
+    points.push(toScene(ex, ey, heightAt(ex, ey) + 0.3));
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineDashedMaterial({
+      color: 0xff2a2a, dashSize: shown ? 3 : 2, gapSize: shown ? 1 : 1.5, transparent: true, opacity: shown || !selectedShortcut ? 1 : 0.45,
+    }));
+    line.computeLineDistances();
+    world.add(line);
+  }
   for (const landmark of state.blockout.landmarks) {
     const [x, y] = landmark.position;
     const ground = heightAt(x, y);
@@ -256,7 +280,15 @@ function placeWalker() {
   walker.yaw = Math.atan2(w / 2 - walker.x, d / 2 - walker.y); // face the middle
 }
 
-// Move by (dx, dy) metres unless the step climbs steeper than the Max Walkable Slope.
+// The ground's own steepness at a point, in its steepest direction, in degrees.
+function groundSlope(x, y) {
+  const dx = (heightAt(x + 0.5, y) - heightAt(x - 0.5, y)), dy = (heightAt(x, y + 0.5) - heightAt(x, y - 0.5));
+  return Math.atan(Math.hypot(dx, dy)) * 180 / Math.PI;
+}
+
+// Move by (dx, dy) metres unless the step climbs onto ground steeper than the
+// Max Walkable Slope, as the Shortcut Check and a game's character controller
+// judge it: switchbacks across a steep face don't climb it, but any drop is fine.
 function step(dx, dy) {
   const [w, d] = state.footprint;
   const nx = Math.min(Math.max(walker.x + dx, 0), w), ny = Math.min(Math.max(walker.y + dy, 0), d);
@@ -264,7 +296,7 @@ function step(dx, dy) {
   if (run === 0) return false;
   const rise = heightAt(nx, ny) - heightAt(walker.x, walker.y);
   const slope = Math.atan2(rise, run) * 180 / Math.PI;
-  if (slope > state.max_walkable_slope) return false;
+  if (rise > 0 && (slope > state.max_walkable_slope || groundSlope(nx, ny) > state.max_walkable_slope)) return false;
   walker.x = nx; walker.y = ny; walker.slope = slope;
   return true;
 }
@@ -343,8 +375,18 @@ function renderChecks() {
   const rows = state.checks.map((c) => {
     const waived = c.check in state.waivers;
     const mark = c.passed ? ["pass", "pass"] : waived ? ["waived", "waived"] : ["miss", "MISS"];
-    const goal = c.at_most ? `≤ ${amount(c.target, c.unit)}` : `${amount(c.target, c.unit)} ±${Math.round(c.tolerance * 100)}%`;
-    return h("tr", {}, h("td", { class: mark[0] }, mark[1]), h("td", {}, c.check),
+    const goal = c.at_most ? `≤ ${amount(c.target, c.unit)}`
+      : c.at_least ? `≥ ${amount(c.target * (1 - c.tolerance), c.unit)}`
+      : `${amount(c.target, c.unit)} ±${Math.round(c.tolerance * 100)}%`;
+    const attrs = c.route
+      ? { class: `route${c.check === selectedShortcut ? " selected" : ""}`, title: "Show this Shortcut from above",
+          onclick: () => {
+            selectedShortcut = c.check === selectedShortcut ? null : c.check;
+            if (selectedShortcut) walker.overview = true;
+            render();
+          } }
+      : {};
+    return h("tr", attrs, h("td", { class: mark[0] }, mark[1]), h("td", {}, c.check),
       h("td", {}, amount(c.measured, c.unit)), h("td", { class: "na" }, goal));
   });
   for (const r of state.blockout.readings.filter((r) => r.measure === null)) {

@@ -30,3 +30,13 @@ def test_a_hard_but_possible_brief_passes():
 
     assert brief_check(winding) == []
     assert brief_check(far) == []
+
+
+def test_a_walk_target_can_be_marked_no_shortcut_and_is_not_by_default():
+    marked = brief([200, 200], {"from": "spawn", "to": "cave", "time": 60, "no_shortcut": True})
+    unmarked = brief([200, 200], {"from": "spawn", "to": "cave", "time": 60})
+
+    assert marked.walk_targets[0].no_shortcut
+    assert not unmarked.walk_targets[0].no_shortcut
+    assert Brief.from_dict(marked.to_dict()) == marked
+    assert "no_shortcut" not in unmarked.to_dict()["walk_targets"][0]  # older Briefs read back unchanged

@@ -2,7 +2,7 @@ import math
 
 from dataclasses import replace
 
-from quarry.blockout import Blockout, Landmark, Path, Reading, Reason
+from quarry.blockout import Blockout, Landmark, Path, Reading, Reason, Zone
 from quarry.brief import Brief
 from quarry.checks import run_checks
 
@@ -143,3 +143,84 @@ def test_a_reading_can_cap_the_highest_ground():
     assert on_gentle["reading low dunes"].unit == "m"
     assert on_gentle["reading low dunes"].passed
     assert not on_steep["reading low dunes"].passed
+
+
+def hill(height, no_shortcut=True):
+    """Camp at the foot of a dome 80 m across its radius, the summit on its crown,
+    joined by a Path wound long enough for a 10-minute walk target."""
+    brief = Brief.from_dict(
+        {
+            "footprint": [200, 200],
+            "waypoints": ["camp", "summit"],
+            "walk_targets": [
+                {"from": "camp", "to": "summit", "time": 600, "tolerance": 0.05, "no_shortcut": no_shortcut}
+            ],
+            "max_walkable_slope": 25,
+        }
+    )
+    dome = Zone("hill", (100, 100), 80, height, "dome", "add", AI)
+    blockout = Blockout(
+        landmarks=(Landmark("camp", (100, 10), AI), Landmark("summit", (100, 100), AI)),
+        paths=(Path("camp", "summit", ((100, 10), (10, 10), (10, 190), (190, 190), (190, 10), (100, 100)), AI),),
+        zones=(dome,),
+    )
+    return brief, blockout
+
+
+def test_a_hill_walkable_straight_up_is_a_shortcut_round_a_forced_walk():
+    brief, blockout = hill(height=20)  # steepest ≈ atan(1.57 × 20 / 80) ≈ 21°, under 25°
+
+    shortcut = by_name(run_checks(brief, blockout))["shortcut camp→summit"]
+
+    assert not shortcut.passed
+    assert shortcut.unit == "s" and shortcut.target == 600 and shortcut.tolerance == 0.05
+    assert 90 / 1.4 < shortcut.measured < 1.1 * 92.2 / 1.4  # about the straight line up, along the ground
+    assert math.dist(shortcut.route[0], (100, 10)) < 1.5
+    assert math.dist(shortcut.route[-1], (100, 100)) < 1.5
+
+
+def test_a_hill_too_steep_to_climb_leaves_no_shortcut():
+    brief, blockout = hill(height=40)  # steepest ≈ 38°, a ring no one can climb
+
+    shortcut = by_name(run_checks(brief, blockout))["shortcut camp→summit"]
+
+    assert shortcut.passed
+    assert shortcut.measured is None  # no walkable route at all
+    assert shortcut.route is None
+
+
+def test_a_player_can_drop_down_a_cliff_but_not_climb_it():
+    brief = Brief.from_dict(
+        {
+            "footprint": [200, 200],
+            "waypoints": ["top", "beach"],
+            "walk_targets": [
+                {"from": "top", "to": "beach", "time": 600, "no_shortcut": True},
+                {"from": "beach", "to": "top", "time": 600, "no_shortcut": True},
+            ],
+        }
+    )
+    plateau = Zone("plateau", (100, 120), 60, 10, "flat", "replace", AI)  # sheer 10 m rim all round
+    blockout = Blockout(
+        landmarks=(Landmark("top", (100, 120), AI), Landmark("beach", (100, 20), AI)),
+        paths=(
+            Path("top", "beach", ((100, 120), (100, 20)), AI),
+            Path("beach", "top", ((100, 20), (100, 120)), AI),
+        ),
+        zones=(plateau,),
+    )
+
+    checks = by_name(run_checks(brief, blockout))
+
+    down, up = checks["shortcut top→beach"], checks["shortcut beach→top"]
+    assert not down.passed and down.measured < 110 / 1.4
+    assert up.passed and up.measured is None
+
+
+def test_an_unmarked_walk_target_is_never_checked_for_shortcuts():
+    brief, blockout = hill(height=20, no_shortcut=False)  # walkable straight up, but nobody asked
+
+    names = set(by_name(run_checks(brief, blockout)))
+
+    assert "walk camp→summit" in names
+    assert not any(name.startswith("shortcut") for name in names)
