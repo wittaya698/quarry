@@ -94,10 +94,10 @@ def test_the_slope_profile_shapes_the_ramp():
 
 def climb(cut):
     """Camp at the foot of a 40 m dome, the summit on its crown, joined by a
-    straight Path 90 m long, 6 m wide if cut; both Pads are 6 m in radius."""
+    straight Path 90 m long, 8 m wide if cut; both Pads are 6 m in radius."""
     hill = Zone("hill", (100, 100), 80, 40, "dome", "add", AI)
     landmarks = (Landmark("camp", (100, 10), AI), Landmark("summit", (100, 100), AI))
-    path = Path("camp", "summit", ((100, 10), (100, 100)), AI, cut=cut, width=6 if cut else None)
+    path = Path("camp", "summit", ((100, 10), (100, 100)), AI, cut=cut, width=8 if cut else None)
     return surface(Blockout(landmarks, (path,), (hill,))), surface(Blockout(landmarks, (), (hill,)))
 
 
@@ -110,22 +110,22 @@ def test_a_cut_path_rises_evenly_between_its_pads_whatever_the_zones_beneath_do(
     assert ground.height(100, 98) == pytest.approx(40)
     for y in (30, 55, 80):
         assert ground.height(100, y) == pytest.approx(40 * (y - 16) / 78)
-        assert ground.height(102.5, y) == pytest.approx(40 * (y - 16) / 78)  # across the strip, too
+        assert ground.height(103.5, y) == pytest.approx(40 * (y - 16) / 78)  # across the strip, too
 
 
 def test_a_cut_paths_banks_are_sheer_on_the_blockout():
     ground, zones_only = climb(cut=True)
 
-    inside, outside = ground.height(102.9, 55), ground.height(103.1, 55)
+    inside, outside = ground.height(103.9, 55), ground.height(104.1, 55)
 
-    assert outside == pytest.approx(zones_only.height(103.1, 55))  # beyond the strip, the dome
+    assert outside == pytest.approx(zones_only.height(104.1, 55))  # beyond the strip, the dome
     assert inside - outside > 3  # a step, not a slope
 
 
 def test_a_path_that_is_not_cut_never_changes_the_ground():
     ground, zones_only = climb(cut=False)
 
-    for x, y in ((100, 12), (100, 55), (102.5, 80), (110, 55)):
+    for x, y in ((100, 12), (100, 55), (103.5, 80), (110, 55)):
         assert ground.height(x, y) == zones_only.height(x, y)
     assert ground.owner(100, 55) == "hill"
 
@@ -133,13 +133,13 @@ def test_a_path_that_is_not_cut_never_changes_the_ground():
 def test_a_refine_plan_eases_a_cut_paths_banks_outward_and_leaves_its_grade_exact():
     hill = Zone("hill", (100, 100), 80, 40, "dome", "add", AI)
     landmarks = (Landmark("camp", (100, 10), AI), Landmark("summit", (100, 100), AI))
-    path = Path("camp", "summit", ((100, 10), (100, 100)), AI, cut=True, width=6)
+    path = Path("camp", "summit", ((100, 10), (100, 100)), AI, cut=True, width=8)
     blockout = Blockout(landmarks, (path,), (hill,))
     def refined(name, falloff):
         return Refinement(name, "smooth", falloff, 0.0, 1, 0.5, AI)
     plan = RefinePlan((refined("ground", 0), refined("hill", 0), refined("camp→summit", 8)))
     ground, zones_only = surface(blockout, plan), surface(Blockout(landmarks, (), (hill,)))
 
-    assert ground.height(102.9, 55) == pytest.approx(40 * (55 - 16) / 78)  # the whole strip keeps its grade
-    assert abs(ground.height(103.1, 55) - ground.height(102.9, 55)) < 0.1  # no step at its edge
-    assert ground.height(111.1, 55) == pytest.approx(zones_only.height(111.1, 55))  # the dome again past the falloff
+    assert ground.height(103.9, 55) == pytest.approx(40 * (55 - 16) / 78)  # the whole strip keeps its grade
+    assert abs(ground.height(104.1, 55) - ground.height(103.9, 55)) < 0.1  # no step at its edge
+    assert ground.height(112.1, 55) == pytest.approx(zones_only.height(112.1, 55))  # the dome again past the falloff

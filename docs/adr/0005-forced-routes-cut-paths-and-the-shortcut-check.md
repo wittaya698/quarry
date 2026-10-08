@@ -17,7 +17,8 @@ We decided:
 
 ## Consequences
 
-- A Path can now change the ground, but only when it is a Cut Path. The Blockout owns which Paths are cut and how wide each strip is (at least 4 m). This extends ADR-0003's "where and how big".
+- A Path can now change the ground, but only when it is a Cut Path. The Blockout owns which Paths are cut and how wide each strip is. This extends ADR-0003's "where and how big".
+- A Cut Path is at least 8 m wide. Terrain is sampled every 2 m, and the samples nearest each bank read as too steep to climb. On review, a 5 m trail left a walkable lane only 1–3 m wide, jagged where it ran diagonally, and a walker stalled about halfway up long-climb. At 8 m the same climb walks end to end. We kept 2 m Terrain rather than sampling every 1 m, which also fixed it but costs about 4× in build time, page data and Export size. A wide strip lets a walker cut inside its turns, so a forced walk's fastest route can run a little shorter than its Path.
 - At Checkpoint #1 a Cut Path's banks are sheer. The Refine Plan refines each Cut Path as a surface of its own, above every Zone, and may ease its banks. If easing makes a bank climbable, the Shortcut Check on the Terrain catches it, as every Check runs at both Checkpoints.
 - A Shortcut miss carries the Shortcut's route. Both Checkpoint pages draw it, and it goes into the next Draft's input.
 - Reopen carry-forward treats a Cut Path like a Zone: it is touched if it was edited or overlaps the edited shape.

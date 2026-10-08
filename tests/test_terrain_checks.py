@@ -175,7 +175,7 @@ def spiral_climb():
     points = tuple((100 + r * math.cos(a), 100 + r * math.sin(a)) for a, r in turns)
     return Blockout(
         landmarks=(Landmark("camp", points[0], ai), Landmark("summit", (100, 100), ai)),
-        paths=(Path("camp", "summit", points, ai, cut=True, width=6),),
+        paths=(Path("camp", "summit", points, ai, cut=True, width=8),),
         zones=(Zone("hill", (100, 100), 80, 40, "dome", "add", ai),),
     )
 

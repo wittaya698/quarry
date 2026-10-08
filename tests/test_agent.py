@@ -160,21 +160,21 @@ def test_an_ai_chosen_landmark_and_a_decorative_path_are_allowed(island):
 
 def test_a_cut_path_and_its_width_round_trip_into_the_revision(island):
     output = blockout_output()
-    output["paths"][0].update(cut=True, width=6, reason=ai("a 6 m cut graded evenly along the ridge"))
+    output["paths"][0].update(cut=True, width=8, reason=ai("an 8 m cut graded evenly along the ridge"))
 
     island.draft(ClaudeAgent(client=FakeLLM(output)))
 
     [path] = island.current_revision.blockout.paths
-    assert path.cut and path.width == 6
+    assert path.cut and path.width == 8
     assert type(island.current_revision.blockout).from_dict(island.current_revision.blockout.to_dict()) == island.current_revision.blockout
 
 
 @pytest.mark.parametrize("change, match", [
-    (lambda p: p.update(cut=True, width=3), "at least 4 m"),
-    (lambda p: p.update(cut=True, width=None), "at least 4 m"),
+    (lambda p: p.update(cut=True, width=7), "at least 8 m"),
+    (lambda p: p.update(cut=True, width=None), "at least 8 m"),
     (lambda p: p.update(width=6), "only a Cut Path has a width"),
 ])
-def test_a_cut_path_needs_a_width_of_at_least_4_m_and_only_a_cut_path_has_one(island, change, match):
+def test_a_cut_path_needs_a_width_of_at_least_8_m_and_only_a_cut_path_has_one(island, change, match):
     refused(island, broken(lambda o: change(o["paths"][0])), match)
 
 
@@ -335,7 +335,7 @@ def test_the_latest_terrains_shortcut_misses_are_in_the_next_refine_plans_input(
 @pytest.fixture
 def approved_with_a_cut(island):
     output = blockout_output()
-    output["paths"][0].update(cut=True, width=6)
+    output["paths"][0].update(cut=True, width=8)
     island.draft(ClaudeAgent(client=FakeLLM(output)))
     island.approve(1, by=ALICE, waivers={c.check: "test" for c in island.checks() if not c.passed})
     return island

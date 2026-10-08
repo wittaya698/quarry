@@ -4,7 +4,7 @@ Site's history. A Draft that breaks a rule is refused whole, never repaired.
 from dataclasses import fields
 
 from quarry.blockout import Blockout, Landmark, Path, Reading, Zone
-from quarry.brief import CORRIDOR, Brief
+from quarry.brief import Brief
 from quarry.edits import REFINE_VALUES
 from quarry.refine import RefinePlan, Refinement
 
@@ -24,6 +24,11 @@ _BLOCKOUT_FIELDS = {f.name for f in fields(Blockout)} | {
 
 # Checkpoint acts (ADR-0004): no Draft may carry one, in any spelling of the field.
 _HUMAN_ACTS = {"approval", "approve", "waiver", "waivers", "rejection", "reject", "reopen"}
+
+# A Cut Path's narrowest strip. Terrain is sampled every 2 m, and the samples
+# nearest each bank read as too steep, so a narrower strip leaves too thin and
+# jagged a lane to walk (found in review, issue 13).
+CUT_PATH_MIN_WIDTH = 8.0
 
 _NUMBER = (int, float)
 _BLOCKOUT_SHAPE = {
@@ -71,8 +76,8 @@ def validate_blockout(brief, output):
             if end not in names:
                 raise InvalidDraft(f"malformed output: a Path ends at {end}, which is no Landmark")
         label = f"Path {path['start']}→{path['end']}"
-        if path["cut"] and not (path["width"] or 0) >= CORRIDOR:
-            raise InvalidDraft(f"{label} is a Cut Path {path['width']} m wide; it needs to be at least {CORRIDOR:g} m")
+        if path["cut"] and not (path["width"] or 0) >= CUT_PATH_MIN_WIDTH:
+            raise InvalidDraft(f"{label} is a Cut Path {path['width']} m wide; it needs to be at least {CUT_PATH_MIN_WIDTH:g} m")
         if not path["cut"] and path["width"] is not None:
             raise InvalidDraft(f"{label} has a width, but only a Cut Path has a width")
     routes = [(p["start"], p["end"]) for p in output["paths"] if not p["decorative"]]

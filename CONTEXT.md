@@ -73,7 +73,7 @@ An AI-drawn intended route between two **Landmarks** in a **Blockout**; the play
 _Avoid_: Road, trail, route, navmesh
 
 **Cut Path**:
-A **Path** the AI marks to grade its own strip of ground, at least 4 m wide, rising evenly from its start **Landmark** to its end whatever the **Zones** beneath it do; used to force a route, such as a climb that winds up a hill too steep to climb anywhere else.
+A **Path** the AI marks to grade its own strip of ground, at least 8 m wide, rising evenly from its start **Landmark** to its end whatever the **Zones** beneath it do; used to force a route, such as a climb that winds up a hill too steep to climb anywhere else.
 _Avoid_: Trail, road, ramp
 
 **Reading**:

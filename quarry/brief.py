@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-CORRIDOR = 4.0  # metres; the narrowest strip a Path can wind along, and a Cut Path's narrowest width
+CORRIDOR = 4.0  # metres; the narrowest strip a Path can wind along
 
 
 @dataclass(frozen=True)

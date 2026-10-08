@@ -120,7 +120,7 @@ Coordinates are metres on the Brief's footprint: x from 0 to width, y from 0 to 
   the whole ground for any faster route a player could walk, climbing only onto
   ground no steeper than the Max Walkable Slope but dropping down any slope. A
   Shortcut is a miss; the Path alone does not stop one.
-- A Cut Path (cut true, width at least 4 m) grades its own strip of ground, above
+- A Cut Path (cut true, width at least 8 m) grades its own strip of ground, above
   every Zone. Use one where a walk must be forced (a no_shortcut Walk Target) or
   a trail must be cut into a slope; an ordinary Path never changes the ground.
   - Each end's Pad is held level at the height the Zones give its Landmark; the
@@ -134,6 +134,9 @@ Coordinates are metres on the Brief's footprint: x from 0 to width, y from 0 to 
     dome with h / r well above the limits above, steep across its whole flank,
     with the Cut Path winding round it at its own gentle grade. Keep the turns of
     a winding Cut Path at least its width apart.
+  - A walker can cut the inside of every turn across the strip's width, so the
+    fastest route along it is shorter than the Path. Make a forced walk's Path
+    long enough that the inside of its turns still meets the Walk Target.
   - Say in its Reason why it is cut and how wide it is.
 - Where and how big belongs to the Blockout. How the ground looks up close
   (roughness, seed, vegetation, slope profile, falloff) belongs to the Refine
