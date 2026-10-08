@@ -146,3 +146,14 @@ Site: `.scratch/quarry-mvp/review/sites/round4/long-climb`, drafted live after t
 - The trail's steepest point rises from 5.5° to 12.5°. This is Terrain resolution, not the plan: heights are stored every 2 m, so some points on the 5 m trail's centreline borrow height from a sample on the bank. Still well under 25°.
 
 Still for the reviewer: walk it, and confirm the summit can't be climbed straight up.
+
+**Reviewer, Round 4 walk (2026-10-09):** *"I get stuck at this too often."* At a corner of the trail the walker stopped against a wall. Diagnosis: Terrain is sampled every 2 m, and the samples nearest each bank read as too steep. That left the 5 m trail a walkable lane only 1–3 m wide, jagged on the diagonal. A simulated walker following the trail stalled at 387 of 835 m, whichever way it slid. With an 8 m trail, or with 1 m Terrain, it walks end to end. The reviewer chose an **8 m minimum Cut Path** (ADR-0005).
+
+## Round 5 — long-climb, 8 m Cut Paths and the fixed Brief (2026-10-09)
+
+Site: `.scratch/quarry-mvp/review/sites/round5/long-climb`. The Brief now asks 10:00 ±10% for spring→summit.
+
+**Every Check passes.** shortcut camp→summit measures 10:25 against the 9:30 floor.
+- The crag is a 150 m dome on an 86 m radius, cut off flat at 80 m.
+- The 8 m Cut Path crosses the meadow from camp on a raised causeway, winds twice round the crag with its loops 16 m apart, and ends in a trench across the flat top.
+- The Reason works out the inside-of-the-bends route (about 580 s), following the new prompt line.
