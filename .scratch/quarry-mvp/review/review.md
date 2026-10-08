@@ -32,24 +32,28 @@ For each sample, record accept or reject, with a reason, for its Readings, place
 **All samples, Reasons (2026-10-08):** reject. *"Describe what the trail looks like, not slope numbers you can't compute."*
 
 #### cozy-forest
-- Readings:
-- Placements:
-- Reasons:
+- Readings: accept. Round 3's ceilings are met by its own layout.
+- Placements: accept (Round 3 Blockout approved 2026-10-08).
+- Reasons: accept from Round 3 on; Round 1's were rejected for guessed slopes.
+- Refine Plan: accept (2026-10-09).
 
 #### coastal-cliffs
-- Readings:
-- Placements:
-- Reasons:
+- Readings: accept. "steep" stays unmeasured, since it is a minimum, not a ceiling.
+- Placements: accept (Round 3 Blockout approved 2026-10-08).
+- Reasons: accept from Round 3 on; Round 1's were rejected for guessed slopes.
+- Refine Plan: accept (2026-10-09).
 
 #### tight-courtyard
-- Readings:
-- Placements:
-- Reasons:
+- Readings: accept from Round 3 on; Round 1's "flat" missed its own ceiling.
+- Placements: accept (Round 3 Blockout approved 2026-10-08), with the dome ramp onto the terrace.
+- Reasons: accept from Round 3 on; Round 1 and 2 called a sheer step a gentle climb or a ramp.
+- Refine Plan: accept (2026-10-09), on the Terrain rebuilt after issue 14.
 
 #### long-climb
-- Readings:
-- Placements:
-- Reasons:
+- Readings: accept.
+- Placements: accept from Round 5 on (Blockout approved 2026-10-09); Round 3's let the summit be climbed straight up.
+- Reasons: accept; Round 5's works out the inside-of-the-bends route.
+- Refine Plan: accept (Round 5, 2026-10-09).
 
 ## Round 2 — Blockouts, after the "no guessed numbers" rule (2026-10-08)
 
@@ -176,3 +180,5 @@ Beyond a Pad, the Terrain Builder now eases out the *correction* (the Pad's leve
 **Round 3 tight-courtyard, Terrain Checks again (same Refine Plan, rebuilt):** "flat" now **passes at 12.3°** against 15°. It was 17.6°, and the refined Surface alone peaks at 13.0°. fountain→terrace eases from 16.7° to 12.0°.
 
 Every other review Site's Terrain Checks keep the same results; the measures move by hundredths. One exception improves: Round 5 long-climb's trail eases from 11.4° to 9.4°.
+
+**Reviewer, Refine Plans (2026-10-09):** accepted the Round 3 Refine Plans for cozy-forest, coastal-cliffs and tight-courtyard. With long-climb's Round 5, every sample's Draft is accepted as a reasonable starting point.
