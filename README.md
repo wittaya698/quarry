@@ -200,7 +200,7 @@ tests/
 
 ## Roadmap
 
-The MVP is planned as fifteen vertical slices in [.scratch/quarry-mvp/issues/](.scratch/quarry-mvp/issues/):
+The MVP is planned as sixteen vertical slices in [.scratch/quarry-mvp/issues/](.scratch/quarry-mvp/issues/):
 
 1. ✅ Tracer: Brief → Blockout → Checks → Approve/Reject via CLI
 2. ✅ Tracer: Refine Plan → Terrain → `.glb`
@@ -213,7 +213,8 @@ The MVP is planned as fifteen vertical slices in [.scratch/quarry-mvp/issues/](.
 9. Complete Export and the corruption self-test
 10. Verify in Godot 4 (human)
 11. ✅ Subscription Agent: draft on the Claude subscription via Claude Code, the default (blocks 7)
-12. Shortcut Check: a Brief can mark a walk no Shortcut, and any faster walkable route misses (blocks 7, 13)
-13. Cut Paths: a Path can grade its own strip of ground, to force a route up a steep hill (blocks 7)
-14. Pad blend: flattening a Pad never steepens the ground around it (blocks 7)
-15. Brief Check: refuse a Brief whose other Walk Targets undercut a forced walk
+12. ✅ Shortcut Check: a Brief can mark a walk no Shortcut, and any faster walkable route misses (blocks 7, 13)
+13. ✅ Cut Paths: a Path can grade its own strip of ground, to force a route up a steep hill (blocks 7)
+14. ✅ Pad blend: flattening a Pad never steepens the ground around it (blocks 7)
+15. ✅ Brief Check: refuse a Brief whose other Walk Targets undercut a forced walk
+16. Path slope Check judges the ground's slope too, like the Shortcut Check
