@@ -208,7 +208,7 @@ The MVP is planned as sixteen vertical slices in [.scratch/quarry-mvp/issues/](.
 4. ✅ Checkpoint #1 page: a top-down Blockout view in the browser, with edits and human acts
 5. ✅ Checkpoint #2: Checks on Terrain, Waivers per Checkpoint, and a walkable preview
 6. ✅ Live Agent: a Claude-backed adapter with a validation layer
-7. Draft quality review (human)
+7. ✅ Draft quality review (human)
 8. Going back: Reopen, carry-forward and Edit Requests
 9. Complete Export and the corruption self-test
 10. Verify in Godot 4 (human)
