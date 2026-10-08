@@ -16,9 +16,9 @@ Ease the *correction* instead (the Pad's level minus the natural ground at the P
 
 ## Acceptance criteria
 
-- [ ] Where the ground under a Pad and its margin is already level, flattening changes no height anywhere (tested)
-- [ ] A Pad on a slope is still level on the Terrain, and the Pad Check still passes (existing tests)
-- [ ] The approved Round 3 tight-courtyard Terrain passes its "flat" Reading
+- [x] Where the ground under a Pad and its margin is already level, flattening changes no height anywhere (tested)
+- [x] A Pad on a slope is still level on the Terrain, and the Pad Check still passes (existing tests)
+- [x] The approved Round 3 tight-courtyard Terrain passes its "flat" Reading (12.3° against 15°; its Refine Plan is still awaiting review)
 
 ## Blocked by
 

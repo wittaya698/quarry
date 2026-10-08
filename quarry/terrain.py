@@ -50,16 +50,19 @@ def build_terrain(brief, blockout_revision, refine_plan_revision):
     shape = surface(blockout_revision.blockout, refine_plan_revision.plan)
     refinements = {s.surface: s for s in refine_plan_revision.plan.surfaces}
     pads = [(l.position, l.pad_radius + _PAD_MARGIN, shape.height(*l.position)) for l in blockout_revision.blockout.landmarks]
+
+    def natural(x, y):
+        # Surface values come from the topmost Zone alone, never a blend.
+        own = refinements[shape.owner(x, y)]
+        return shape.height(x, y) + own.roughness * _noise(own.seed, x, y)
+
     heights, vegetation = [], []
     for r in range(rows):
         height_row, vegetation_row = [], []
         for c in range(columns):
             x, y = c * SPACING, r * SPACING
-            # Surface values come from the topmost Zone alone, never a blend.
-            own = refinements[shape.owner(x, y)]
-            height = shape.height(x, y) + own.roughness * _noise(own.seed, x, y)
-            height_row.append(_flatten_pads(pads, x, y, height))
-            vegetation_row.append(own.vegetation_density)
+            height_row.append(_flatten_pads(pads, x, y, natural))
+            vegetation_row.append(refinements[shape.owner(x, y)].vegetation_density)
         heights.append(tuple(height_row))
         vegetation.append(tuple(vegetation_row))
     heights, vegetation = tuple(heights), tuple(vegetation)
@@ -68,14 +71,19 @@ def build_terrain(brief, blockout_revision, refine_plan_revision):
     )
 
 
-def _flatten_pads(pads, x, y, height):
-    """Hold each Pad level at its centre's Surface height, easing out beyond it."""
+def _flatten_pads(pads, x, y, natural):
+    """Hold each Pad level at its centre's Surface height. Beyond it, ease out the
+    correction (the level less the natural ground at the Pad's edge, this way from
+    its centre), not the height, so ground already level under a Pad is unchanged
+    and ground falling away past it is never squeezed steeper."""
+    height = natural(x, y)
     for (px, py), flat_radius, level in pads:
         d = ((x - px) ** 2 + (y - py) ** 2) ** 0.5
         if d <= flat_radius:
             height = level
         elif d < flat_radius + _PAD_BLEND:
-            height = _lerp(level, height, _smooth((d - flat_radius) / _PAD_BLEND))
+            edge = natural(px + (x - px) * flat_radius / d, py + (y - py) * flat_radius / d)
+            height += (level - edge) * (1 - _smooth((d - flat_radius) / _PAD_BLEND))
     return height
 
 

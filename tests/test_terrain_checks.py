@@ -7,7 +7,9 @@ from quarry.blockout import Blockout, Landmark, Path, Reason, Zone
 from quarry.brief import Brief
 from quarry.export import read_glb
 from quarry.identity import Human
+from quarry.refine import RefinePlan, Refinement
 from quarry.site import Refused, Site
+from quarry.surface import surface
 
 ALICE = Human("alice")
 
@@ -242,3 +244,36 @@ def test_the_exports_collision_carries_a_cut_paths_strip(tmp_path):
     assert collision[(100, 160)] == pytest.approx(terrain.height(100, 160), abs=1e-4)
     dome = 40 * (1 + math.cos(math.pi * 60 / 80)) / 2  # the hill alone, 60 m from its centre
     assert abs(collision[(100, 160)] - dome) > 1
+
+
+class Smooth(Drafts):
+    """Drafts a fixed Blockout; refines every surface with a 6 m smooth falloff and no roughness."""
+
+    def draft_refine_plan(self, brief, blockout, rejection_note=None, shortcuts=()):
+        names = ["ground", *(z.name for z in blockout.zones)]
+        return RefinePlan(tuple(
+            Refinement(name, "smooth", 6.0, 0.0, 1, 0.3, Reason("ai", "test")) for name in names
+        )).to_dict()
+
+
+def test_a_pad_on_ground_already_level_changes_no_height(tmp_path):
+    # The terrace is level out to 9 m (its 6 m falloff straddles its 12 m rim),
+    # exactly the reach of a 6 m Pad and its margin; beyond, it falls away.
+    ai = Reason("ai", "test")
+    terrace = Blockout(
+        landmarks=(Landmark("bench", (100, 100), ai),),
+        paths=(),
+        zones=(Zone("terrace", (100, 100), 12, 3, "flat", "add", ai),),
+    )
+    site = Site.create(tmp_path / "terrace", Brief.from_dict({"footprint": [200, 200], "waypoints": ["bench"]}))
+    agent = Smooth(terrace)
+    site.draft(agent)
+    site.approve(1, by=ALICE)
+    site.draft_refine_plan(agent)
+    shape = surface(terrace, site.current_refine_plan.plan)
+    terrain = site.terrain()
+
+    for r, row in enumerate(terrain.heights):
+        for c, height in enumerate(row):
+            x, y = c * terrain.spacing, r * terrain.spacing
+            assert height == pytest.approx(shape.height(x, y), abs=1e-9), (x, y)

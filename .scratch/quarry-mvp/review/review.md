@@ -168,3 +168,11 @@ Site: `.scratch/quarry-mvp/review/sites/round5/long-climb`. The Brief now asks 1
 Still for the reviewer: walk it, and confirm the summit can't be climbed straight up.
 
 **Reviewer, Round 5 walk (2026-10-09):** accepted. The summit can't be climbed straight up, and the trail walks to the top. The reviewer approved the Refine Plan. long-climb's verdict from Round 1 is resolved.
+
+## Issue 14 — Pad blend (2026-10-09)
+
+Beyond a Pad, the Terrain Builder now eases out the *correction* (the Pad's level less the natural ground at the Pad's edge), not the height. Ground already level under a Pad comes out unchanged.
+
+**Round 3 tight-courtyard, Terrain Checks again (same Refine Plan, rebuilt):** "flat" now **passes at 12.3°** against 15°. It was 17.6°, and the refined Surface alone peaks at 13.0°. fountain→terrace eases from 16.7° to 12.0°.
+
+Every other review Site's Terrain Checks keep the same results; the measures move by hundredths. One exception improves: Round 5 long-climb's trail eases from 11.4° to 9.4°.
