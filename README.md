@@ -4,7 +4,7 @@ A terrain-authoring tool for game developers. An AI agent drafts the terrain, an
 
 You write a **Brief**: a footprint, the places you care about, how long it should take to walk between them, and a mood. The AI drafts a coarse **Blockout** with a **Reason** for each choice. Quarry then measures that Blockout against your targets rather than taking the AI's word for it. Nothing moves on until you approve one exact **Revision**.
 
-> **Status: early.** The skeleton runs end to end from the CLI: Brief → Brief Check → Blockout (Zones, Pads, Readings) → all Blockout Checks → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. Both Checkpoints have a browser page: a top-down Blockout editor at #1, and a first-person walk over the Terrain at #2, where every Check runs again on the real ground. The Export carries the terrain mesh, its collision, an anchor per Landmark, a curve per Path and vegetation density, with an optional Godot scene; `quarry selftest` proves every guard can fail. Drafts come from Claude on your subscription by default, through the Claude Code CLI; `--agent api` uses the Anthropic API instead, and `--agent fake` an offline fake. See [the roadmap](#roadmap).
+> **Status: early.** The skeleton runs end to end from the CLI: Brief → Brief Check → Blockout (Zones, Pads, Readings) → all Blockout Checks → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. Both Checkpoints have a browser page: a top-down Blockout editor at #1, and a first-person walk over the Terrain at #2, where every Check runs again on the real ground. The Export carries the terrain mesh, its collision, an anchor per Landmark, a curve per Path and vegetation density, with an optional Godot scene that makes each Path a Path3D; `quarry selftest` proves every guard can fail. Drafts come from Claude on your subscription by default, through the Claude Code CLI; `--agent api` uses the Anthropic API instead, and `--agent fake` an offline fake. See [the roadmap](#roadmap).
 
 ## Quick start
 
@@ -70,7 +70,7 @@ uv run quarry export island island.glb --tscn
 
 ```
 exported island.glb from Blockout Revision 1 and Refine Plan Revision 1; collision, anchors and curves verified
-wrote island.tscn, which instances it
+wrote island.tscn, which instances it and makes each Path a Path3D
 ```
 
 ### In Godot
@@ -128,7 +128,7 @@ func vegetation_density(terrain: Node3D, x: float, z: float) -> float:
 | `quarry approve SITE N [--waive "CHECK=WHY"]...` | Approve Revision N at the current Checkpoint; every missed Check needs a Waiver |
 | `quarry reject SITE N --note TEXT`               | Reject Revision N at the current Checkpoint, saying what was wrong |
 | `quarry revive SITE N`                           | Copy a rejected Revision forward as a new one                |
-| `quarry export SITE OUT.glb [--tscn]`            | Write the `.glb` (needs an approved, non-Superseded Refine Plan), then re-import it to verify collision, anchors and curves; `--tscn` adds a Godot 4 scene that instances it |
+| `quarry export SITE OUT.glb [--tscn]`            | Write the `.glb` (needs an approved, non-Superseded Refine Plan), then re-import it to verify collision, anchors and curves; `--tscn` adds a Godot 4 scene that instances it and makes each Path a Path3D |
 | `quarry selftest`                                | Build a known-good Site with the fake Agent, export it, then corrupt it seven ways and report each one caught; exits 1 if any gets through |
 
 The `--agent` choices:
@@ -178,7 +178,7 @@ The Brief Check flags a Walk Target only when no route could meet it: one longer
 - **Going back supersedes, never patches.** A Reopen withdraws the Blockout's Approval. Every Refine Plan Revision built on it becomes Superseded: still viewable, and its Terrain still walkable read-only, but closed to every act and never exportable. Changing the Brief after Approval Reopens first. Terrain changes only through a new Blockout or Refine Plan Revision.
 - **Carry-forward keeps what didn't change.** The first Refine Plan after a Reopen keeps the Superseded plan's values for every surface the new Blockout left untouched, each with a Reason naming the Revision it came from. It still needs its own Approval. A Zone or Cut Path is touched if it was edited (including restacked), or if it overlaps the old or new shape of anything edited: a Zone, a Cut Path's strip or a Landmark's Pad.
 - **Edit Requests never apply silently.** At Checkpoint #1 the Agent answers with a new Blockout Revision. At Checkpoint #2 it answers with a new Refine Plan Revision, or with "needs Reopen" naming the Blockout property, and nothing changes until you Reopen. The answer is validated like any Draft. It may hand back an unchanged choice with that choice's Reason, even a human one, but never put a human Reason on something it changed.
-- **Export is verified, not trusted.** Export is refused until the Refine Plan is approved, and for Superseded Terrain always. The `.glb` names its collision mesh `terrain_collision-colonly`, so Godot 4 builds a StaticBody3D named `terrain_collision` on import. No other node may end in a Godot import hint, and no two sibling nodes may keep the same name once Godot strips one. Under `landmarks` is an empty anchor per Landmark, standing on its Pad; under `paths`, a line-strip curve per Path, laid along the ground; on `terrain`, vegetation density in its glTF extras, which Godot reads as `get_meta("extras")["vegetation_density"]` (spacing, rows, columns, and one value per height sample, row by row from the footprint's corner; see [In Godot](#in-godot)). Each Export is re-imported and re-measured before the file is kept: every node name as Godot will read it, every collision height against the Terrain, every anchor against its Landmark, every curve against its Path.
+- **Export is verified, not trusted.** Export is refused until the Refine Plan is approved, and for Superseded Terrain always. The `.glb` names its collision mesh `terrain_collision-colonly`, so Godot 4 builds a StaticBody3D named `terrain_collision` on import. No other node may end in a Godot import hint, and no two sibling nodes may keep the same name once Godot strips one. Under `landmarks` is an empty anchor per Landmark, standing on its Pad; under `paths`, a line-strip curve per Path, laid along the ground (glTF has no curve type, so the `--tscn` scene makes each a Path3D from the same points, ready for a PathFollow3D, and hides the lines); on `terrain`, vegetation density in its glTF extras, which Godot reads as `get_meta("extras")["vegetation_density"]` (spacing, rows, columns, and one value per height sample, row by row from the footprint's corner; see [In Godot](#in-godot)). Each Export is re-imported and re-measured before the file is kept: every node name as Godot will read it, every collision height against the Terrain, every anchor against its Landmark, every curve against its Path.
 - **Every guard is proven able to fail.** `quarry selftest` steepens a Path, moves a Landmark off its Pad, tilts a Pad, changes Terrain without a Revision, has the Agent approve, reuses a Checkpoint #1 Waiver at #2 and exports Superseded Terrain, and each must be caught by the guard meant for it. The tests switch each guard off in turn and check that the self-test then fails. See [ADR-0002](docs/adr/0002-standalone-core-browser-checkpoints-glb-export.md).
 
 ## Development
@@ -206,7 +206,7 @@ quarry/
   blockout.py   Blockout: Landmarks with Pads, Paths, Zones and Readings, each with a Reason
   refine.py     Refine Plan: how each surface looks up close, with a Reason
   terrain.py    Terrain Builder: Surface + Refine Plan → height and vegetation grids
-  export.py     .glb writer with Godot collision naming, anchors, curves and vegetation; its re-import; the .tscn
+  export.py     .glb writer with Godot collision naming, anchors, curves and vegetation; its re-import; the .tscn with a Path3D per Path, and its re-read
   selftest.py   Deliberate corruptions, each of which must be caught
   identity.py   Human, Automated, and the Agent's identity
   cli.py        Thin CLI wiring over the core
@@ -236,7 +236,7 @@ The MVP is planned as sixteen vertical slices in [.scratch/quarry-mvp/issues/](.
 7. ✅ Draft quality review (human)
 8. ✅ Going back: Reopen, carry-forward and Edit Requests
 9. ✅ Complete Export and the corruption self-test
-10. Verify in Godot 4: passes in Godot 4.7, headless and walked first-person; closes once 18 is fixed
+10. ✅ Verify in Godot 4: passes in Godot 4.7, headless and walked first-person
 11. ✅ Subscription Agent: draft on the Claude subscription via Claude Code, the default (blocks 7)
 12. ✅ Shortcut Check: a Brief can mark a walk no Shortcut, and any faster walkable route misses (blocks 7, 13)
 13. ✅ Cut Paths: a Path can grade its own strip of ground, to force a route up a steep hill (blocks 7)
@@ -244,5 +244,5 @@ The MVP is planned as sixteen vertical slices in [.scratch/quarry-mvp/issues/](.
 15. ✅ Brief Check: refuse a Brief whose other Walk Targets undercut a forced walk
 16. ✅ Path slope Check judges the ground's slope too, like the Shortcut Check
 17. ✅ Godot names the collision body at random (found in 10)
-18. Paths arrive in Godot as lines, not curves (found in 10; needs a decision)
+18. ✅ Paths arrive in Godot as lines, not curves (found in 10)
 19. ✅ Vegetation metadata sits under `extras` in Godot (found in 10)

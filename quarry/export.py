@@ -5,7 +5,7 @@ The terrain mesh appears twice: once as `terrain`, for display, and once as
 collision body named `terrain_collision`.
 The display mesh carries vegetation as density data, one value per height
 sample, in its node's extras. `write_tscn` adds an optional Godot scene that
-instances the `.glb`. Under `landmarks` is an empty node per Landmark, standing on its Pad; under
+instances the `.glb` and makes each Path a Path3D. Under `landmarks` is an empty node per Landmark, standing on its Pad; under
 `paths`, a line-strip curve per Path, laid along the ground.
 
 `read_glb` is the round-trip's re-import. It parses the file's bytes through
@@ -14,6 +14,7 @@ a writer bug cannot hide behind a matching reader bug.
 """
 import json
 import math
+import re
 import struct
 from dataclasses import dataclass
 from pathlib import Path
@@ -350,13 +351,61 @@ def _off_line(point, points):
 
 def write_tscn(glb):
     """A thin Godot 4 scene beside the `.glb` that instances it, for dropping
-    the Site straight into a game. Returns the scene's path."""
+    the Site straight into a game. glTF has no curve type, so the scene makes
+    each Path a Path3D, from the curve the `.glb` holds, and hides the `.glb`'s
+    own lines. Returns the scene's path."""
     glb = Path(glb)
+    curves = read_glb(glb).curves
     scene = glb.with_suffix(".tscn")
-    scene.write_text(
-        "[gd_scene load_steps=2 format=3]\n\n"
-        f'[ext_resource type="PackedScene" path="{glb.name}" id="1_glb"]\n\n'
-        f'[node name="{glb.stem}" type="Node3D"]\n\n'
-        '[node name="terrain" parent="." instance=ExtResource("1_glb")]\n'
-    )
+    parts = [
+        f"[gd_scene load_steps={2 + len(curves)} format=3]",
+        f'[ext_resource type="PackedScene" path="{glb.name}" id="1_glb"]',
+    ]
+    for i, points in enumerate(curves.values(), 1):
+        # each point is its in handle, its out handle and its position
+        vectors = ", ".join(f"0, 0, 0, 0, 0, 0, {x!r}, {height!r}, {y!r}" for x, height, y in points)
+        tilts = ", ".join("0" for _ in points)
+        parts.append(
+            f'[sub_resource type="Curve3D" id="Curve3D_{i}"]\n'
+            f'_data = {{\n"points": PackedVector3Array({vectors}),\n"tilts": PackedFloat32Array({tilts})\n}}\n'
+            f"point_count = {len(points)}"
+        )
+    parts += [
+        f'[node name="{glb.stem}" type="Node3D"]',
+        '[node name="terrain" parent="." instance=ExtResource("1_glb")]',
+        f'[node name="{PATHS}" parent="terrain"]\nvisible = false',
+        f'[node name="{PATHS}" type="Node3D" parent="."]',
+        *(
+            f'[node name="{name}" type="Path3D" parent="{PATHS}"]\ncurve = SubResource("Curve3D_{i}")'
+            for i, name in enumerate(curves, 1)
+        ),
+        '[editable path="terrain"]',
+    ]
+    scene.write_text("\n\n".join(parts) + "\n")
     return scene
+
+
+@dataclass(frozen=True)
+class ImportedScene:
+    """What a re-read of the `.tscn` finds. Points are Godot's order: (x, height, y)."""
+    path3ds: dict  # Path3D name → its curve's points, in order
+    hidden: frozenset  # node paths, from the scene's root, set not visible
+
+
+def read_tscn(scene):
+    """Read the scene back, as Godot would, without the writer's help."""
+    text = Path(scene).read_text()
+    curves, path3ds, hidden = {}, {}, set()
+    for section in re.split(r"\n(?=\[)", text):
+        header, _, body = section.partition("]")
+        fields = dict(re.findall(r'(\w+)="([^"]*)"', header))
+        if header.startswith("[sub_resource") and fields.get("type") == "Curve3D":
+            numbers = [float(n) for n in re.search(r"PackedVector3Array\(([^)]*)\)", body)[1].split(",")]
+            curves[fields["id"]] = tuple(tuple(numbers[i + 6 : i + 9]) for i in range(0, len(numbers), 9))
+        elif header.startswith("[node"):
+            if fields.get("type") == "Path3D":
+                path3ds[fields["name"]] = curves[re.search(r'SubResource\("([^"]*)"\)', body)[1]]
+            if re.search(r"^visible = false$", body, re.M):
+                parent = fields["parent"]
+                hidden.add(fields["name"] if parent == "." else f"{parent}/{fields['name']}")
+    return ImportedScene(path3ds, frozenset(hidden))

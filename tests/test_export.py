@@ -7,7 +7,7 @@ import pytest
 
 from quarry.agent import FakeAgent
 from quarry.brief import Brief
-from quarry.export import ExportError, export_glb, godot_name, read_glb, verify_export
+from quarry.export import ExportError, export_glb, godot_name, read_glb, read_tscn, verify_export, write_tscn
 from quarry.identity import Human
 from quarry.site import Refused, Site
 
@@ -155,6 +155,34 @@ def test_each_path_is_a_curve_laid_along_the_ground(refined, tmp_path):
             assert height == pytest.approx(terrain.height(x, y), abs=1e-3)
         # close enough together that the curve rides over the rise, not through it
         assert all(math.dist(a, b) <= terrain.spacing + 1e-6 for a, b in zip(curve, curve[1:]))
+
+
+def test_the_scene_makes_each_path_a_path3d_laid_along_the_ground(refined, tmp_path):
+    out = tmp_path / "meadow.glb"
+
+    refined.export(out)
+    scene = read_tscn(write_tscn(out))
+
+    terrain = refined.terrain()
+    paths = refined.revision(refined.approval.revision).blockout.paths
+    # a Path3D's Curve3D, which a PathFollow3D can ride with no conversion
+    assert set(scene.path3ds) == {f"{p.start}→{p.end}" for p in paths}
+    for path in paths:
+        curve = scene.path3ds[f"{path.start}→{path.end}"]
+        assert (curve[0][0], curve[0][2]) == pytest.approx(path.points[0], abs=1e-4)
+        assert (curve[-1][0], curve[-1][2]) == pytest.approx(path.points[-1], abs=1e-4)
+        for x, height, y in curve:
+            assert height == pytest.approx(terrain.height(x, y), abs=1e-3)
+        assert all(math.dist(a, b) <= terrain.spacing + 1e-6 for a, b in zip(curve, curve[1:]))
+
+
+def test_the_scene_hides_the_glbs_own_path_lines(refined, tmp_path):
+    out = tmp_path / "meadow.glb"
+
+    refined.export(out)
+
+    # the .glb instanced as terrain, and its paths node of line meshes
+    assert read_tscn(write_tscn(out)).hidden == {"terrain/paths"}
 
 
 def test_vegetation_is_density_data_on_the_terrain_node(refined, tmp_path):

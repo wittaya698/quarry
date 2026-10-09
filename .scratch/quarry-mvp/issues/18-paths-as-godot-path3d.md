@@ -1,6 +1,6 @@
 # 18 — Paths arrive in Godot as lines, not curves
 
-Status: needs-triage
+Status: done
 
 ## Parent
 
@@ -18,10 +18,21 @@ glTF has no curve type, so the `.glb` alone can't fix this. Options:
 
 ## Acceptance criteria
 
-- [ ] A decision between the options above
-- [ ] In Godot 4, each Path can drive a PathFollow3D with no hand conversion, or the docs say exactly how to get one
-- [ ] The round-trip test checks whatever form the curve takes
+- [x] A decision between the options above
+- [x] In Godot 4, each Path can drive a PathFollow3D with no hand conversion, or the docs say exactly how to get one
+- [x] The round-trip test checks whatever form the curve takes
 
 ## Blocked by
 
 - None
+
+## Decided (2026-10-09)
+
+- **Option 1.** The `--tscn` scene adds a `paths` Node3D with a Path3D per Path, named `start→end`. Its Curve3D holds the same points as the `.glb`'s line, with no handles. The scene hides the `.glb`'s own `paths` node (`terrain/paths`) through an editable-instance override. The `.glb` itself is unchanged.
+- `write_tscn` takes the points from the written `.glb`, which the Export has already verified, so the scene can't drift from it.
+- **Round-trip:** `read_tscn` reads the scene back without the writer's help. The tests check each Path3D's curve against its Path and the Terrain, the same way the `.glb`'s curves are checked, and check that the lines are hidden.
+- **Checked in Godot 4.7.2, headless,** on the self-test's Site:
+  - The scene imports with no errors.
+  - `terrain/paths` is hidden.
+  - spawn→cave is a Path3D 80.62 m long, matching the walk Check.
+  - A PathFollow3D at `progress_ratio = 0.5` sits at (100.0, 3.14, 60.0), on the ground at the rise.

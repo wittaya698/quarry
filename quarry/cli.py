@@ -353,7 +353,7 @@ def _export(args):
         f"and Refine Plan Revision {terrain.refine_plan_revision}; collision, anchors and curves verified"
     )
     if args.tscn:
-        print(f"wrote {write_tscn(args.out)}, which instances it")
+        print(f"wrote {write_tscn(args.out)}, which instances it and makes each Path a Path3D")
 
 
 def _selftest(args):
