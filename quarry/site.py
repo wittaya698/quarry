@@ -349,14 +349,16 @@ class Site:
         """Write the Site's Export: only from Terrain whose Refine Plan is approved.
         The file is re-imported and re-measured before it takes the given name,
         so a failed Export never leaves a `.glb` behind."""
+        if self._refine.revisions:
+            self._refine.live(self._refine.revisions[-1].number)  # Superseded Terrain never exports
         if self.refine_plan_approval is None:
             raise Refused("Export needs an approved Refine Plan")
         path = Path(path)
-        terrain = self.terrain()
+        terrain, blockout = self.terrain(), self.revision(self.approval.revision).blockout
         pending = path.with_name(path.name + ".partial")
         try:
-            export_glb(terrain, pending)
-            verify_export(terrain, pending)
+            export_glb(terrain, blockout, pending)
+            verify_export(terrain, blockout, pending)
         except BaseException:
             pending.unlink(missing_ok=True)
             raise

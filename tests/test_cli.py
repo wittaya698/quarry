@@ -95,3 +95,23 @@ def test_an_edit_request_needing_a_reopen_says_so_and_offers_the_command(tmp_pat
     out = capsys.readouterr().out
     assert "needs Reopen: rise height" in out and f"quarry reopen {site.path}" in out
     assert Site.open(site.path).current_refine_plan.number == 1
+
+
+def test_export_with_tscn_writes_a_scene_that_instances_the_glb(done, tmp_path, capsys):
+    out = tmp_path / "godot" / "meadow.glb"
+    out.parent.mkdir()
+
+    assert main(["export", str(done.path), str(out), "--tscn"]) == 0
+
+    scene = (tmp_path / "godot" / "meadow.tscn").read_text()
+    # a path relative to the scene, so the pair works wherever it lands in a Godot project
+    assert '[ext_resource type="PackedScene" path="meadow.glb" id="1_glb"]' in scene
+    assert '[node name="meadow" type="Node3D"]' in scene
+    assert '[node name="terrain" parent="." instance=ExtResource("1_glb")]' in scene
+    assert "meadow.tscn" in capsys.readouterr().out
+
+
+def test_export_writes_no_tscn_unless_asked(done, tmp_path):
+    main(["export", str(done.path), str(tmp_path / "meadow.glb")])
+
+    assert not (tmp_path / "meadow.tscn").exists()

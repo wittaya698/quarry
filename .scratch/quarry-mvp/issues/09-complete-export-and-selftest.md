@@ -13,14 +13,22 @@ Status: ready-for-agent
 
 ## Acceptance criteria
 
-- [ ] The `.glb` contains anchors named per Landmark at their exact positions, Path curves, and vegetation density
-- [ ] The optional `.tscn` instances the `.glb`
-- [ ] The round-trip asserts collision, anchors and curves; Export is refused for unapproved or Superseded Terrain
-- [ ] `selftest` passes on a clean install and reports each corruption as caught
-- [ ] Removing any one guard makes `selftest` fail, which proves each guard can fail
+- [x] The `.glb` contains anchors named per Landmark at their exact positions, Path curves, and vegetation density
+- [x] The optional `.tscn` instances the `.glb`
+- [x] The round-trip asserts collision, anchors and curves; Export is refused for unapproved or Superseded Terrain
+- [x] `selftest` passes on a clean install and reports each corruption as caught
+- [x] Removing any one guard makes `selftest` fail, which proves each guard can fail
 
 ## Blocked by
 
 - `02-tracer-refine-terrain-glb.md`
 - `03-all-blockout-checks.md`
 - `08-going-back.md`
+
+## Decided (2026-10-09)
+
+- **Vegetation density** is node metadata: the `terrain` node's glTF extras hold `vegetation_density` (spacing, rows, columns, and one value per height sample, row by row with x fastest). Godot 4.4+ imports extras as metadata; issue 10 confirms it.
+- **Anchors** stand on the ground: (x, the Terrain's height there, y), under a `landmarks` node. **Curves** are line strips under `paths`, named `start→end`, with a point at least every half height sample so they ride over the ground.
+- **The `.tscn`** is a Node3D root with the `.glb` instanced as `terrain`, by a path relative to the scene.
+- **"Terrain changed without a Revision"** is caught by the round-trip: every collision height must equal the Terrain the approved Revisions build.
+- **The self-test acts as Human("selftest")**, but only on Sites it creates in a temporary directory and then deletes.

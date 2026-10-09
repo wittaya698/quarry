@@ -2,6 +2,8 @@
 import argparse
 import getpass
 import sys
+import tempfile
+import time
 import webbrowser
 
 import anthropic
@@ -10,9 +12,10 @@ from quarry.agent import FakeAgent
 from quarry.brief import Brief
 from quarry.claude_agent import AgentUnavailable, ClaudeAgent
 from quarry.claude_code_agent import ClaudeCodeAgent
-from quarry.export import ExportError
+from quarry.export import ExportError, write_tscn
 from quarry.identity import Automated, Human
 from quarry.page import serve
+from quarry.selftest import selftest
 from quarry.site import Refused, Site
 from quarry.validation import InvalidDraft, NeedsReopen
 
@@ -24,7 +27,7 @@ AGENTS = {"subscription": ClaudeCodeAgent, "api": ClaudeAgent, "fake": FakeAgent
 def main(argv=None):
     args = _parser().parse_args(argv)
     try:
-        args.run(args)
+        code = args.run(args)
     except (Refused, ExportError, FileExistsError, FileNotFoundError) as error:
         print(f"quarry: {error}", file=sys.stderr)
         return 1
@@ -34,7 +37,7 @@ def main(argv=None):
     except (AgentUnavailable, anthropic.AnthropicError) as error:
         print(f"quarry: the Claude Agent could not draft: {error}", file=sys.stderr)
         return 1
-    return 0
+    return code or 0
 
 
 def _parser():
@@ -114,7 +117,11 @@ def _parser():
     export = commands.add_parser("export", help="write the .glb once the Refine Plan is approved")
     export.add_argument("site")
     export.add_argument("out", help="the .glb file to write")
+    export.add_argument("--tscn", action="store_true", help="also write a Godot 4 scene that instances it")
     export.set_defaults(run=_export)
+
+    selftest = commands.add_parser("selftest", help="prove the Checks and Ledger rules catch deliberate corruptions")
+    selftest.set_defaults(run=_selftest)
 
     return parser
 
@@ -343,8 +350,22 @@ def _export(args):
     terrain = site.terrain()
     print(
         f"exported {args.out} from Blockout Revision {terrain.blockout_revision} "
-        f"and Refine Plan Revision {terrain.refine_plan_revision}; collision verified"
+        f"and Refine Plan Revision {terrain.refine_plan_revision}; collision, anchors and curves verified"
     )
+    if args.tscn:
+        print(f"wrote {write_tscn(args.out)}, which instances it")
+
+
+def _selftest(args):
+    started = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="quarry-selftest-") as workdir:
+        outcomes = selftest(workdir)
+    passed = all(o.caught for o in outcomes)
+    print(f"selftest {'PASS' if passed else 'FAIL'} ({time.monotonic() - started:.1f}s): "
+          f"a known-good Site exported and verified, then {len(outcomes)} corruptions")
+    for outcome in outcomes:
+        print(f"  {'caught' if outcome.caught else 'MISSED'}  {outcome.corruption} — {outcome.detail}")
+    return 0 if passed else 1
 
 
 def _waiver(text):

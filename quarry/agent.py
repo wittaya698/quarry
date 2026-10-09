@@ -41,6 +41,9 @@ class FakeAgent:
     def __init__(self, seed=1):
         self.seed = seed
 
+    def __repr__(self):
+        return f"FakeAgent(seed={self.seed})"
+
     def draft_blockout(self, brief, rejection_note=None, shortcuts=()):
         width, depth = brief.footprint
         radius = min(width, depth) / 3

@@ -37,7 +37,7 @@ def test_reopening_supersedes_the_refine_plan_which_stays_viewable_but_never_exp
     superseded = done.refine_plan(1)
     assert superseded.superseded
     assert done.superseded_terrain(1).refine_plan_revision == 1  # still viewable
-    with pytest.raises(Refused, match="approved Refine Plan"):
+    with pytest.raises(Refused, match="Refine Plan Revision 1 is Superseded"):
         done.export(out)
     assert not out.exists()
 
