@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://1jd67s43sps0"]
 
-[ext_resource type="Script" path="res://walk_here.gd" id="1"]
+[ext_resource type="Script" uid="uid://bppuhv4v4otpf" path="res://walk_here.gd" id="1"]
 
-[node name="walk" type="Node3D"]
+[node name="walk" type="Node3D" unique_id=1734832128]
 script = ExtResource("1")
+site = "meadow"

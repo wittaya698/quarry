@@ -222,7 +222,7 @@ The MVP is planned as sixteen vertical slices in [.scratch/quarry-mvp/issues/](.
 7. ✅ Draft quality review (human)
 8. ✅ Going back: Reopen, carry-forward and Edit Requests
 9. ✅ Complete Export and the corruption self-test
-10. Verify in Godot 4: measured headless in Godot 4.7 and passing; still open: a first-person feel check (human) and the fixes in 17–19
+10. Verify in Godot 4: passes in Godot 4.7, headless and walked first-person; closes once 17–19 are fixed
 11. ✅ Subscription Agent: draft on the Claude subscription via Claude Code, the default (blocks 7)
 12. ✅ Shortcut Check: a Brief can mark a walk no Shortcut, and any faster walkable route misses (blocks 7, 13)
 13. ✅ Cut Paths: a Path can grade its own strip of ground, to force a route up a steep hill (blocks 7)

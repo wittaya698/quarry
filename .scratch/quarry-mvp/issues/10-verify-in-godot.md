@@ -13,7 +13,7 @@ A human imports an exported Site into Godot 4 and confirms it works as a game sp
 ## Acceptance criteria
 
 - [x] The `.glb`, or the `.tscn` wrapper, imports into Godot 4 with no manual setup
-- [x] A character can walk the Terrain without falling through, and walk times feel consistent with the measured Checks (measured; how it *feels* first-person is still for a human)
+- [x] A character can walk the Terrain without falling through, and walk times feel consistent with the measured Checks (measured headless, and walked first-person by the user: all good)
 - [x] Landmark anchors and Path curves are present and positioned correctly (curves are lines, not Path3D: issue 18)
 - [ ] Any mismatch is filed as a new issue, and the round-trip test is updated to catch it (filed as 17, 18 and 19; the round-trip updates are part of each)
 
@@ -47,3 +47,7 @@ Each was exported with `--tscn` and imported into an empty project. The scripts 
   - **17:** the collision body gets a random name, because its stripped name clashes with the `terrain` mesh.
   - **18:** Paths arrive as line-strip meshes, not Path3D/Curve3D.
   - **19:** the vegetation density sits under the `extras` metadata entry, and its rows/columns arrive as floats.
+
+## First-person walk (2026-10-09)
+
+The user walked the Sites first-person in `review/godot/project` (see `walk_here.gd`). It felt right: no falls through the ground, the Landmarks stood on flat Pads, the slopes were walkable and the climb felt long.
