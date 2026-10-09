@@ -15,6 +15,13 @@ def test_a_walk_target_naming_an_undefined_waypoint_is_a_problem():
     assert "lighthouse" in problems[0]
 
 
+def test_a_waypoint_godot_would_read_as_an_import_hint_is_a_problem():
+    problems = brief_check(brief([200, 200], waypoints=("spawn", "cave-col")))
+
+    assert len(problems) == 1
+    assert "cave-col" in problems[0] and "col" in problems[0]
+
+
 # The longest route a 100 × 100 m footprint can hold without crossing itself,
 # 4 m corridors climbing at the 30° Max Walkable Slope: 2500 m / cos 30° ≈ 2887 m,
 # which is about 2062 s at the 1.4 m/s Walk Speed.

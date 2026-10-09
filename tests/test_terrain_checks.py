@@ -238,7 +238,7 @@ def test_the_exports_collision_carries_a_cut_paths_strip(tmp_path):
     site.approve_refine_plan(1, by=ALICE)
     site.export(tmp_path / "spiral.glb")
 
-    collision = {(x, z): y for x, y, z in read_glb(tmp_path / "spiral.glb").meshes["terrain-colonly"].positions}
+    collision = {(x, z): y for x, y, z in read_glb(tmp_path / "spiral.glb").meshes["terrain_collision-colonly"].positions}
     terrain = site.terrain()
     # On the strip at (100, 160), the trail's graded height, not the dome's.
     assert collision[(100, 160)] == pytest.approx(terrain.height(100, 160), abs=1e-4)

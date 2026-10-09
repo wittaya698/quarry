@@ -5,6 +5,8 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
+from quarry.export import godot_name
+
 CORRIDOR = 4.0  # metres; the narrowest strip a Path can wind along
 
 
@@ -70,6 +72,10 @@ def brief_check(brief):
     """The Brief Check: only what is provably impossible, as one problem each.
     A hard Brief passes; only an impossible one blocks drafting."""
     problems = []
+    for name in brief.waypoints:
+        hint = godot_name(name)[1]
+        if hint:
+            problems.append(f"Waypoint {name} ends in {hint}, an import hint Godot would act on; rename it")
     for t in brief.walk_targets:
         for name in (t.start, t.end):
             if name not in brief.waypoints:

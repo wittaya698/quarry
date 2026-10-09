@@ -37,7 +37,7 @@ drafted Revision 1
   —       reading cozy exploration  not measurable: a feel to judge by eye
 ```
 
-A Brief that's provably impossible, for example a Walk Target naming an undefined Waypoint or one too long to fit in the footprint, fails the **Brief Check**. `status` lists the problems, and `draft` is refused until the Brief is fixed.
+A Brief that's provably impossible, for example a Walk Target naming an undefined Waypoint or one too long to fit in the footprint, or a Waypoint whose name ends in a Godot import hint such as `-col` or `_noimp`, fails the **Brief Check**. `status` lists the problems, and `draft` is refused until the Brief is fixed.
 
 Review the Blockout in the browser:
 
@@ -164,7 +164,7 @@ The Brief Check flags a Walk Target only when no route could meet it: one longer
 - **Going back supersedes, never patches.** A Reopen withdraws the Blockout's Approval. Every Refine Plan Revision built on it becomes Superseded: still viewable, and its Terrain still walkable read-only, but closed to every act and never exportable. Changing the Brief after Approval Reopens first. Terrain changes only through a new Blockout or Refine Plan Revision.
 - **Carry-forward keeps what didn't change.** The first Refine Plan after a Reopen keeps the Superseded plan's values for every surface the new Blockout left untouched, each with a Reason naming the Revision it came from. It still needs its own Approval. A Zone or Cut Path is touched if it was edited (including restacked), or if it overlaps the old or new shape of anything edited: a Zone, a Cut Path's strip or a Landmark's Pad.
 - **Edit Requests never apply silently.** At Checkpoint #1 the Agent answers with a new Blockout Revision. At Checkpoint #2 it answers with a new Refine Plan Revision, or with "needs Reopen" naming the Blockout property, and nothing changes until you Reopen. The answer is validated like any Draft. It may hand back an unchanged choice with that choice's Reason, even a human one, but never put a human Reason on something it changed.
-- **Export is verified, not trusted.** Export is refused until the Refine Plan is approved, and for Superseded Terrain always. The `.glb` names its collision mesh `terrain-colonly`, so Godot 4 builds a collision body on import. Under `landmarks` is an empty anchor per Landmark, standing on its Pad; under `paths`, a line-strip curve per Path, laid along the ground; on `terrain`, vegetation density as node metadata (`vegetation_density`: spacing, rows, columns, and one value per height sample, row by row from the footprint's corner). Each Export is re-imported and re-measured before the file is kept: every collision height against the Terrain, every anchor against its Landmark, every curve against its Path.
+- **Export is verified, not trusted.** Export is refused until the Refine Plan is approved, and for Superseded Terrain always. The `.glb` names its collision mesh `terrain_collision-colonly`, so Godot 4 builds a StaticBody3D named `terrain_collision` on import. No other node may end in a Godot import hint, and no two sibling nodes may keep the same name once Godot strips one. Under `landmarks` is an empty anchor per Landmark, standing on its Pad; under `paths`, a line-strip curve per Path, laid along the ground; on `terrain`, vegetation density as node metadata (`vegetation_density`: spacing, rows, columns, and one value per height sample, row by row from the footprint's corner). Each Export is re-imported and re-measured before the file is kept: every node name as Godot will read it, every collision height against the Terrain, every anchor against its Landmark, every curve against its Path.
 - **Every guard is proven able to fail.** `quarry selftest` steepens a Path, moves a Landmark off its Pad, tilts a Pad, changes Terrain without a Revision, has the Agent approve, reuses a Checkpoint #1 Waiver at #2 and exports Superseded Terrain, and each must be caught by the guard meant for it. The tests switch each guard off in turn and check that the self-test then fails. See [ADR-0002](docs/adr/0002-standalone-core-browser-checkpoints-glb-export.md).
 
 ## Development
@@ -229,6 +229,6 @@ The MVP is planned as sixteen vertical slices in [.scratch/quarry-mvp/issues/](.
 14. ✅ Pad blend: flattening a Pad never steepens the ground around it (blocks 7)
 15. ✅ Brief Check: refuse a Brief whose other Walk Targets undercut a forced walk
 16. ✅ Path slope Check judges the ground's slope too, like the Shortcut Check
-17. Godot names the collision body at random (found in 10)
+17. ✅ Godot names the collision body at random (found in 10)
 18. Paths arrive in Godot as lines, not curves (found in 10; needs a decision)
 19. Vegetation metadata sits under `extras` in Godot (found in 10)

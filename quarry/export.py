@@ -1,7 +1,8 @@
 """Export: Terrain → a `.glb` that Godot 4 imports with collision (ADR-0002).
 
 The terrain mesh appears twice: once as `terrain`, for display, and once as
-`terrain-colonly`, which Godot's importer turns into a static collision body.
+`terrain_collision-colonly`, which Godot's importer turns into a static
+collision body named `terrain_collision`.
 The display mesh carries vegetation as density data, one value per height
 sample, in its node's extras. `write_tscn` adds an optional Godot scene that
 instances the `.glb`. Under `landmarks` is an empty node per Landmark, standing on its Pad; under
@@ -17,7 +18,13 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 
-COLLISION = "terrain-colonly"
+COLLISION = "terrain_collision-colonly"
+# Godot's import hints: a node name ending in one, after `-`, `_` or `$`, is
+# acted on (made collision, a vehicle, dropped...) and loses the hint.
+GODOT_HINTS = (
+    "noimp", "col", "convcol", "colonly", "convcolonly", "occ", "occonly",
+    "navmesh", "rigid", "vehicle", "wheel", "vcol", "loop", "cycle",
+)
 LANDMARKS = "landmarks"
 PATHS = "paths"
 _JSON, _BIN = 0x4E4F534A, 0x004E4942
@@ -39,6 +46,7 @@ class Imported:
     anchors: dict  # Landmark name → its point
     curves: dict  # "start→end" → the Path's points, in order
     metadata: dict  # node name → its glTF extras, which Godot imports as metadata
+    children: dict  # node name → its children's names, in order; "" is the scene
 
 
 @dataclass(frozen=True)
@@ -170,6 +178,16 @@ def _drape(terrain, points):
     return [(x, terrain.height(x, y), y) for x, y in flat]
 
 
+def godot_name(name):
+    """What Godot 4's importer makes of a node name: (the name it keeps, the
+    import hint it acts on, or None)."""
+    for hint in GODOT_HINTS:
+        for mark in "-_$":
+            if name.lower().endswith(mark + hint):
+                return name[: -len(mark + hint)], hint
+    return name, None
+
+
 def _float32(value):
     return struct.unpack("<f", struct.pack("<f", value))[0]
 
@@ -229,7 +247,11 @@ def read_glb(path):
     }
     curves = {node["name"]: curves[node["name"]] for node in children(PATHS) if node["name"] in curves}
     metadata = {node["name"]: node["extras"] for node in nodes if "name" in node and "extras" in node}
-    return Imported(meshes, anchors, curves, metadata)
+    tree = {"": tuple(nodes[i].get("name", "") for i in document["scenes"][document.get("scene", 0)]["nodes"])}
+    for node in nodes:
+        if node.get("children"):
+            tree[node.get("name", "")] = tuple(nodes[i].get("name", "") for i in node["children"])
+    return Imported(meshes, anchors, curves, metadata, tree)
 
 
 def verify_export(terrain, blockout, path):
@@ -237,10 +259,29 @@ def verify_export(terrain, blockout, path):
     every Landmark's anchor stands on its Pad, and every Path's curve lies on the
     ground from its start to its end."""
     imported = read_glb(path)
+    _verify_names(imported)
     _verify_collision(terrain, imported, path)
     _verify_heights(terrain, imported)
     _verify_anchors(terrain, blockout, imported, path)
     _verify_curves(terrain, blockout, imported, path)
+
+
+def _verify_names(imported):
+    """Godot acts on the hint ending a node's name, and finds the node by the
+    name it keeps: only the collision may carry a hint, and no two siblings may
+    keep the same name."""
+    for siblings in imported.children.values():
+        kept = {}
+        for name in siblings:
+            stem, hint = godot_name(name)
+            if hint and name != COLLISION:
+                raise ExportError(f"Godot would read {name} as {stem} with the {hint} import hint, and act on it")
+            other = kept.setdefault(godot_name(name)[0], name)
+            if other != name:
+                raise ExportError(
+                    f"Godot would name both {name} and {other} {godot_name(name)[0]}, "
+                    "and rename one at random on every import"
+                )
 
 
 def _verify_collision(terrain, imported, path):

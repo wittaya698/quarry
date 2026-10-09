@@ -1,4 +1,5 @@
 import math
+import re
 from dataclasses import replace
 import json
 
@@ -6,7 +7,7 @@ import pytest
 
 from quarry.agent import FakeAgent
 from quarry.brief import Brief
-from quarry.export import ExportError, export_glb, read_glb, verify_export
+from quarry.export import ExportError, export_glb, godot_name, read_glb, verify_export
 from quarry.identity import Human
 from quarry.site import Refused, Site
 
@@ -53,10 +54,10 @@ def test_exported_glb_reimports_with_godot_collision_matching_the_terrain(refine
     refined.export(out)
     nodes = read_glb(out).meshes
 
-    assert {"terrain", "terrain-colonly"} <= set(nodes)
+    assert {"terrain", "terrain_collision-colonly"} <= set(nodes)
     terrain = refined.terrain()
     heights = [h for row in terrain.heights for h in row]
-    collision = nodes["terrain-colonly"]
+    collision = nodes["terrain_collision-colonly"]
     xs, ys, zs = zip(*collision.positions)
     # glTF is Y-up: the footprint's x runs along X, its y along Z, height along Y.
     assert (min(xs), max(xs)) == (0, 200)
@@ -64,6 +65,48 @@ def test_exported_glb_reimports_with_godot_collision_matching_the_terrain(refine
     assert min(ys) == pytest.approx(min(heights), abs=1e-4)
     assert max(ys) == pytest.approx(max(heights), abs=1e-4)
     assert collision.triangles and all(normal_y > 0 for normal_y in collision.facing_up())
+
+
+def test_godot_names_the_collision_body_terrain_collision_beside_the_terrain_mesh(refined, tmp_path):
+    out = tmp_path / "meadow.glb"
+
+    refined.export(out)
+
+    # Godot strips the hint, keeps the rest as the node's name, and acts on the hint
+    top = [godot_name(name) for name in read_glb(out).children[""]]
+    assert top == [("terrain", None), ("terrain_collision", "colonly"), ("landmarks", None), ("paths", None)]
+
+
+def test_an_export_where_godot_would_give_two_nodes_one_name_fails_verification(refined, tmp_path, monkeypatch):
+    out = tmp_path / "meadow.glb"
+    blockout = refined.revision(refined.approval.revision).blockout
+    # the name issue 10 found: stripped of -colonly it is the display mesh's name,
+    # so Godot renamed the collision body @StaticBody3D@19798, new on every import
+    monkeypatch.setattr("quarry.export.COLLISION", "terrain-colonly")
+    export_glb(refined.terrain(), blockout, out)
+
+    with pytest.raises(ExportError, match="Godot would name both terrain-colonly and terrain"):
+        verify_export(refined.terrain(), blockout, out)
+
+
+def _renamed(blockout, old, new):
+    name = lambda n: new if n == old else n
+    return replace(
+        blockout,
+        landmarks=tuple(replace(l, name=name(l.name)) for l in blockout.landmarks),
+        paths=tuple(replace(p, start=name(p.start), end=name(p.end)) for p in blockout.paths),
+    )
+
+
+# Godot 4.7 turned a curve ending in -col into collision, and dropped an anchor ending in _noimp
+@pytest.mark.parametrize("landmark", ["cave-col", "cave_noimp", "cave-wheel", "cave$colonly"])
+def test_an_export_where_godot_would_act_on_a_landmarks_name_fails_verification(refined, tmp_path, landmark):
+    out = tmp_path / "meadow.glb"
+    blockout = _renamed(refined.revision(refined.approval.revision).blockout, "cave", landmark)
+    export_glb(refined.terrain(), blockout, out)
+
+    with pytest.raises(ExportError, match=re.escape(f"Godot would read {landmark} as")):
+        verify_export(refined.terrain(), blockout, out)
 
 
 def test_an_export_that_does_not_match_its_terrain_fails_verification(refined, tmp_path):

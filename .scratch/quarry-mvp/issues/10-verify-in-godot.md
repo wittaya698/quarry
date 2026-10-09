@@ -15,7 +15,7 @@ A human imports an exported Site into Godot 4 and confirms it works as a game sp
 - [x] The `.glb`, or the `.tscn` wrapper, imports into Godot 4 with no manual setup
 - [x] A character can walk the Terrain without falling through, and walk times feel consistent with the measured Checks (measured headless, and walked first-person by the user: all good)
 - [x] Landmark anchors and Path curves are present and positioned correctly (curves are lines, not Path3D: issue 18)
-- [ ] Any mismatch is filed as a new issue, and the round-trip test is updated to catch it (filed as 17, 18 and 19; the round-trip updates are part of each)
+- [ ] Any mismatch is filed as a new issue, and the round-trip test is updated to catch it (filed as 17, 18 and 19; the round-trip updates are part of each; 17 is fixed)
 
 ## Blocked by
 
