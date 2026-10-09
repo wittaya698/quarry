@@ -1,0 +1,9 @@
+config_version=5
+
+[application]
+config/name="Quarry walk"
+run/main_scene="res://walk.tscn"
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720

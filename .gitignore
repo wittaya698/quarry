@@ -33,3 +33,8 @@ node_modules/
 
 # Draft quality review Sites (issue 07); the verdicts are kept in review.md
 .scratch/quarry-mvp/review/sites/
+
+# Exported Sites copied into the Godot walk project; re-export to refresh them
+.scratch/quarry-mvp/review/godot/project/*.glb
+.scratch/quarry-mvp/review/godot/project/*.tscn
+!.scratch/quarry-mvp/review/godot/project/walk.tscn
