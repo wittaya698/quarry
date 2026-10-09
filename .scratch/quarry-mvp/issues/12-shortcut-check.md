@@ -1,6 +1,6 @@
 # 12 — Shortcut Check: catch a faster way round a forced walk
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 

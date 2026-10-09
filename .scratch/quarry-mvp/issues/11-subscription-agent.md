@@ -1,6 +1,6 @@
 # 11 — Subscription Agent: draft on the Claude subscription via Claude Code
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 

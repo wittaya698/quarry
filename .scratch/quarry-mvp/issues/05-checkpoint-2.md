@@ -1,6 +1,6 @@
 # 05 — Checkpoint #2: Checks on Terrain, Waivers per Checkpoint, walkable preview
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 

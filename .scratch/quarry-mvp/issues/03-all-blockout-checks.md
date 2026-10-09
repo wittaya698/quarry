@@ -1,6 +1,6 @@
 # 03 — All Blockout Checks: Surface overlap, slope, Brief Check, Readings, Pads
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 

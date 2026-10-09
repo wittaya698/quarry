@@ -1,6 +1,6 @@
 # 09 — Complete Export + corruption self-test
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 

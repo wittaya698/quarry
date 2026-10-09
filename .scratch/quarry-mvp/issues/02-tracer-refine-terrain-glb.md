@@ -1,6 +1,6 @@
 # 02 — Tracer: Refine Plan → Terrain → `.glb`
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 

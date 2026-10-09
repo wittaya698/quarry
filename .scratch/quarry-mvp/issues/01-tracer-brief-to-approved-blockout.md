@@ -1,6 +1,6 @@
 # 01 — Tracer: Brief → Blockout → Checks → Approve/Reject via CLI
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 

@@ -1,6 +1,6 @@
 # 06 — Live Agent: Blockout and Refine Plan drafting with validation
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 

@@ -1,6 +1,6 @@
 # 14 — Pad blend: flattening a Pad never steepens the ground around it
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 

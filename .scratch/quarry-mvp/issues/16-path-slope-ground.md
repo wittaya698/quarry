@@ -1,6 +1,6 @@
 # 16 — Path slope Check judges the ground's slope too
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 

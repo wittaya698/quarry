@@ -1,6 +1,6 @@
 # 04 — Checkpoint #1 page: view, edits and acts
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 

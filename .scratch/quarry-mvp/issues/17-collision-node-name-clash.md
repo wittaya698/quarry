@@ -1,6 +1,6 @@
 # 17 — Godot names the collision body at random
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 

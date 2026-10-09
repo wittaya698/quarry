@@ -1,6 +1,6 @@
 # 13 — Cut Paths: a Path that grades its own strip of ground
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 

@@ -1,6 +1,6 @@
 # 07 — Draft quality review (HITL)
 
-Status: ready-for-human
+Status: done
 
 ## Parent
 

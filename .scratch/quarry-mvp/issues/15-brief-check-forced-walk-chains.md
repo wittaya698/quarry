@@ -1,6 +1,6 @@
 # 15 — Brief Check: a forced walk that other Walk Targets undercut
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 
