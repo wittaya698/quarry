@@ -32,8 +32,8 @@ def island(tmp_path):
     return site
 
 
-def running(site, caller):
-    server = serve(site.path, caller)
+def running(site, caller=ALICE, **options):
+    server = serve(site.path, caller, **options)
     threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True).start()
     return server
 
@@ -255,3 +255,64 @@ def test_the_page_state_carries_a_missed_shortcuts_route_and_nothing_for_a_pass(
     assert not leaked["passed"] and leaked["at_least"]
     spawn = next(l["position"] for l in state["blockout"]["landmarks"] if l["name"] == "spawn")
     assert len(leaked["route"]) >= 2 and math.dist(leaked["route"][0], spawn) < 1.5
+
+
+def test_an_edit_request_from_the_checkpoint_1_page_drafts_a_revision(island):
+    server = running(island, agent=FakeAgent())
+    try:
+        status, state = call(server, "/api/request", {"request": "make the rise less steep"})
+    finally:
+        server.shutdown()
+
+    assert status == 200 and state["revision"] == 2 and state["needs_reopen"] is None
+    assert Site.open(island.path).current_revision.request == "make the rise less steep"
+
+
+def test_an_edit_request_needing_a_reopen_on_the_checkpoint_2_page_names_it_and_offers_the_reopen(island):
+    island.approve(1, by=ALICE, waivers={"walk spawn→village": "fine"})
+    island.draft_refine_plan(FakeAgent())
+    server = running(island, agent=FakeAgent())
+    try:
+        status, state = call(server, "/api/request", {"request": "make the rise lower"})
+        assert status == 200 and state["checkpoint"] == 2 and state["revision"] == 1
+        assert state["needs_reopen"]["property"] == "rise height" and state["can_reopen"]
+
+        status, state = call(server, "/api/reopen", {})
+    finally:
+        server.shutdown()
+
+    assert status == 200 and state["checkpoint"] == 1 and not state["can_reopen"]
+    site = Site.open(island.path)
+    assert site.reopenings[0].by == ALICE and site.refine_plan(1).superseded
+
+
+def test_a_page_with_no_person_at_the_keyboard_cannot_reopen(island):
+    island.approve(1, by=ALICE, waivers={"walk spawn→village": "fine"})
+    server = running(island, caller=Automated("non-interactive quarry"))
+    try:
+        status, reply = call(server, "/api/reopen", {})
+    finally:
+        server.shutdown()
+
+    assert status == 409 and "only a human" in reply["error"]
+    assert Site.open(island.path).approval is not None
+
+
+def test_a_superseded_refine_plans_terrain_is_viewable_read_only(island):
+    island.approve(1, by=ALICE, waivers={"walk spawn→village": "fine"})
+    island.draft_refine_plan(FakeAgent())
+    island.reopen(by=ALICE)
+    server = running(island, superseded=1)
+    try:
+        _, state = call(server, "/api/state")
+        with urllib.request.urlopen(server.url) as response:
+            html = response.read().decode()
+        status, reply = call(server, "/api/approve", {"revision": 1, "waivers": {}})
+    finally:
+        server.shutdown()
+
+    site = Site.open(island.path)
+    assert state["checkpoint"] == 2 and state["superseded"] and state["revision"] == 1
+    assert state["terrain"]["heights"] == [list(row) for row in site.superseded_terrain(1).heights]
+    assert "Checkpoint #2" in html
+    assert status == 409 and "Superseded" in reply["error"]

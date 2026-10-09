@@ -61,6 +61,8 @@
   .row > * { flex: 1; }
   .error { background: color-mix(in srgb, var(--miss) 15%, var(--panel)); border-color: var(--miss); display: none; }
   .error.shown { display: block; }
+  .needs { border: 1px solid var(--miss); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+  .banner { background: color-mix(in srgb, var(--miss) 15%, var(--panel)); padding: 6px 12px; }
   svg text { fill: var(--ink); pointer-events: none; paint-order: stroke; stroke: var(--ground); stroke-linejoin: round; } /* sized per render: the map is in metres */
   .zone-body { cursor: move; }
   .zone-rim { cursor: ew-resize; }
@@ -80,6 +82,7 @@
   <aside>
     <section class="error" id="error"></section>
     <section><h2>Checks</h2><table id="checks"></table></section>
+    <section id="request"><h2>Edit Request</h2></section>
     <section id="inspector"><h2>Selected</h2><p class="na">Click an element on the map or in the list.</p></section>
     <section><h2>Elements and their Reasons</h2><div id="elements"></div></section>
     <section id="acts"><h2>Approve or reject</h2></section>
@@ -145,6 +148,62 @@ function amount(value, unit) {
   return `${value.toFixed(0)} m`;
 }
 
+// --- Edit Requests and Reopen ------------------------------------------------
+
+const REQUEST_KEY = "quarry-edit-request"; // carried to Checkpoint #1 after a Reopen
+const remembered = { get() { try { return sessionStorage.getItem(REQUEST_KEY) || ""; } catch { return ""; } },
+  set(v) { try { v ? sessionStorage.setItem(REQUEST_KEY, v) : sessionStorage.removeItem(REQUEST_KEY); } catch {} } };
+let asking = false;
+let lastRequest = "";
+
+function renderRequest() {
+  const box = document.getElementById("request");
+  const title = h("h2", {}, "Edit Request");
+  if (state.superseded) {
+    box.replaceChildren(title, h("p", { class: "na" }, "Superseded: viewable only."));
+    return;
+  }
+  const parts = [title];
+  if (state.needs_reopen) {
+    parts.push(h("div", { class: "needs" },
+      h("strong", {}, `needs Reopen: ${state.needs_reopen.property}`), h("div", {}, state.needs_reopen.reason),
+      h("p", { class: "na" }, "Nothing changed. Reopening supersedes this Refine Plan and its Terrain; your request waits at Checkpoint #1."),
+      h("button", { class: "danger", onclick: () => reopen(lastRequest) }, "Reopen the Blockout")));
+  }
+  if (!editable()) {
+    parts.push(h("p", { class: "na" }, `Revision ${state.revision} is ${state.state}.`));
+    box.replaceChildren(...parts);
+    return;
+  }
+  const words = h("textarea", { placeholder: "e.g. make the hill less steep" });
+  words.value = lastRequest || remembered.get();
+  const ask = async () => {
+    if (!words.value.trim()) return showError("an Edit Request needs words saying what to change");
+    asking = true;
+    lastRequest = words.value.trim();
+    renderRequest();
+    await act("/api/request", { request: lastRequest });
+    asking = false;
+    if (!state.needs_reopen) { lastRequest = ""; remembered.set(""); }
+    render();
+  };
+  parts.push(words, h("button", { class: "primary", style: "margin-top:8px", disabled: asking, onclick: ask },
+    asking ? "Asking the Agent…" : "Ask the Agent"));
+  box.replaceChildren(...parts);
+}
+
+async function reopen(carried = "") {
+  remembered.set(carried);
+  await act("/api/reopen", {});
+  if (!document.getElementById("error").classList.contains("shown")) location.reload();
+}
+
+function reopenButton() {
+  if (!state.can_reopen) return [];
+  return [h("p", { class: "na", style: "margin-top:12px" }, "Reopening supersedes any Refine Plan and Terrain built on this Blockout."),
+    h("button", { class: "danger", onclick: () => reopen() }, `Reopen Blockout Revision ${state.blockout_revision ?? state.revision}`)];
+}
+
 function render() {
   const { blockout } = state;
   document.getElementById("state").textContent = `Revision ${state.revision} · ${state.state}`;
@@ -152,6 +211,7 @@ function render() {
   renderChecks(blockout);
   renderElements(blockout);
   renderInspector(blockout);
+  renderRequest();
   renderActs();
 }
 
@@ -403,7 +463,7 @@ function renderActs() {
   const box = document.getElementById("acts");
   const title = h("h2", {}, "Approve or reject");
   if (!editable()) {
-    box.replaceChildren(title, h("p", { class: "na" }, `Revision ${state.revision} is ${state.state}.`));
+    box.replaceChildren(title, h("p", { class: "na" }, `Revision ${state.revision} is ${state.state}.`), ...reopenButton());
     return;
   }
   const missed = state.checks.filter((c) => !c.passed);

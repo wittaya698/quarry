@@ -1,7 +1,8 @@
 """The validation layer: every Agent output passes here before it reaches the
 Site's history. A Draft that breaks a rule is refused whole, never repaired.
 """
-from dataclasses import fields
+import json
+from dataclasses import dataclass, fields
 
 from quarry.blockout import Blockout, Landmark, Path, Reading, Zone
 from quarry.brief import Brief
@@ -11,6 +12,17 @@ from quarry.refine import RefinePlan, Refinement
 
 class InvalidDraft(Exception):
     """Agent output that cannot become a Revision."""
+
+
+@dataclass(frozen=True)
+class NeedsReopen:
+    """The Agent's answer to an Edit Request at Checkpoint #2 that only a
+    Blockout-owned property could satisfy. Nothing is changed; the human decides."""
+    property: str  # in words, e.g. "rise height"
+    reason: str
+
+    def __str__(self):
+        return f"needs Reopen: {self.property} — {self.reason}"
 
 
 # The Brief's targets, as they could appear in a Draft that tried to restate them.
@@ -55,7 +67,9 @@ _REFINE_PLAN_SHAPE = {
 }
 
 
-def validate_blockout(brief, output):
+def validate_blockout(brief, output, current=None):
+    """`current` is the Blockout an Edit Request changed: a choice it holds
+    unchanged may keep its Reason, a human's included."""
     _refuse_foreign(output, _REFINE_FIELDS, "the Refine Plan")
     _require_shape(output, _BLOCKOUT_SHAPE)
     for kind in ("landmarks", "zones"):
@@ -66,7 +80,7 @@ def validate_blockout(brief, output):
     for reading in output["readings"]:
         if (reading["measure"] is None) != (reading["limit"] is None):
             raise InvalidDraft(f"malformed output: the Reading of “{reading['phrase']}” needs both a measure and a limit, or neither")
-    _require_reasons(output)
+    _require_reasons(output, current)
     names = [l["name"] for l in output["landmarks"]]
     for waypoint in brief.waypoints:
         if names.count(waypoint) != 1:
@@ -88,14 +102,14 @@ def validate_blockout(brief, output):
     return Blockout.from_dict(output)
 
 
-def validate_refine_plan(brief, blockout, output):
+def validate_refine_plan(brief, blockout, output, current=None):
     _refuse_foreign(output, _BLOCKOUT_FIELDS, "the Blockout")
     _require_shape(output, _REFINE_PLAN_SHAPE)
     for refinement in output["surfaces"]:
         for field, valid in REFINE_VALUES.items():
             if not valid(refinement[field]) or isinstance(refinement[field], bool):
                 raise InvalidDraft(f"malformed output: {field} {_quote(refinement[field])} for {refinement['surface']}")
-    _require_reasons(output)
+    _require_reasons(output, current)
     cut_paths = (f"{p.start}→{p.end}" for p in blockout.paths if p.cut)
     surfaces = ["ground", *(z.name for z in blockout.zones), *cut_paths]
     refined = [r["surface"] for r in output["surfaces"]]
@@ -108,6 +122,22 @@ def validate_refine_plan(brief, blockout, output):
     return RefinePlan.from_dict(output)
 
 
+def validate_refine_answer(brief, blockout, output, current=None):
+    """An Edit Request's answer at Checkpoint #2: a RefinePlan, or NeedsReopen."""
+    if not isinstance(output, dict) or set(output) != {"plan", "needs_reopen"}:
+        raise InvalidDraft(f"malformed output: expected plan and needs_reopen; got {_quote(output)}")
+    plan, needs = output["plan"], output["needs_reopen"]
+    if (plan is None) == (needs is None):
+        raise InvalidDraft("malformed output: an Edit Request is answered with a plan or a needs_reopen, exactly one")
+    if plan is not None:
+        return validate_refine_plan(brief, blockout, plan, current)
+    if not isinstance(needs, dict) or set(needs) != {"property", "reason"}:
+        raise InvalidDraft(f"malformed output: needs_reopen {_quote(needs)}")
+    if not all(isinstance(needs[k], str) and needs[k].strip() for k in needs):
+        raise InvalidDraft("a needs_reopen answer names the property and says why")
+    return NeedsReopen(needs["property"].strip(), needs["reason"].strip())
+
+
 def _refuse_foreign(output, other_stage, owner):
     """Refuse anything a Draft has no right to write: a human act, the Brief's
     targets, or a property the other stage owns."""
@@ -116,14 +146,23 @@ def _refuse_foreign(output, other_stage, owner):
     _refuse_trespass(output, other_stage, "sets {}, which belongs to " + owner + " (ADR-0003)")
 
 
-def _require_reasons(output):
-    """Every choice carries the AI's own Reason; only a human edit writes a human one."""
+def _require_reasons(output, current=None):
+    """Every choice carries the AI's own Reason; only a human edit writes a human
+    one. An Edit Request's answer may keep a choice of `current` exactly as it was."""
+    kept = _plain(current.to_dict()) if current is not None else {}
     for kind, items in output.items():
         for item in items:
             reason = item["reason"]
+            if _plain(item) in kept.get(kind, ()):
+                continue
             if reason["author"] != "ai" or not str(reason["text"]).strip():
                 label = item.get("name") or item.get("phrase") or item.get("surface") or f"{item.get('start')}→{item.get('end')}"
                 raise InvalidDraft(f"{kind} {label} has no Reason from the AI")
+
+
+def _plain(data):
+    """As JSON would carry it, so a tuple and a list of the same points compare equal."""
+    return json.loads(json.dumps(data))
 
 
 def _refuse_trespass(output, foreign, message):

@@ -14,7 +14,7 @@ from quarry.export import ExportError
 from quarry.identity import Automated, Human
 from quarry.page import serve
 from quarry.site import Refused, Site
-from quarry.validation import InvalidDraft
+from quarry.validation import InvalidDraft, NeedsReopen
 
 # Who drafts. The subscription is the default whatever the environment holds:
 # an API key never switches Quarry to per-token billing on its own.
@@ -62,6 +62,8 @@ def _parser():
     page.add_argument("site")
     page.add_argument("--port", type=int, default=0, help="a fixed port; any free one by default")
     page.add_argument("--no-browser", action="store_true", help="print the URL without opening it")
+    page.add_argument("--refine-plan", type=int, metavar="N", help="view a Superseded Refine Plan Revision's Terrain, read-only")
+    _agent_option(page, "who answers Edit Requests")
     page.set_defaults(run=_open)
 
     status = commands.add_parser("status", help="Checkpoint, Revision and Check results")
@@ -71,6 +73,7 @@ def _parser():
     show = commands.add_parser("show", help="one Revision's choices and Reasons, at the current Checkpoint")
     show.add_argument("site")
     show.add_argument("revision", type=int)
+    show.add_argument("--refine-plan", action="store_true", help="a Refine Plan Revision, Superseded ones included")
     show.set_defaults(run=_show)
 
     approve = commands.add_parser("approve", help="approve one exact Revision at the current Checkpoint")
@@ -93,6 +96,21 @@ def _parser():
     revive.add_argument("revision", type=int)
     revive.set_defaults(run=_revive)
 
+    request = commands.add_parser("request", help="an Edit Request: ask the Agent for a change in plain words")
+    request.add_argument("site")
+    request.add_argument("words", help='e.g. "make the hill less steep"')
+    _agent_option(request)
+    request.set_defaults(run=_request)
+
+    reopen = commands.add_parser("reopen", help="withdraw the Blockout's Approval to change it")
+    reopen.add_argument("site")
+    reopen.set_defaults(run=_reopen)
+
+    brief = commands.add_parser("brief", help="change the Brief; after Approval this Reopens the Blockout")
+    brief.add_argument("site")
+    brief.add_argument("--brief", required=True, help="the new Brief JSON file")
+    brief.set_defaults(run=_brief)
+
     export = commands.add_parser("export", help="write the .glb once the Refine Plan is approved")
     export.add_argument("site")
     export.add_argument("out", help="the .glb file to write")
@@ -101,10 +119,10 @@ def _parser():
     return parser
 
 
-def _agent_option(command):
+def _agent_option(command, role="who drafts"):
     command.add_argument(
         "--agent", choices=AGENTS, default="subscription",
-        help="who drafts: your Claude subscription via Claude Code (default), "
+        help=f"{role}: your Claude subscription via Claude Code (default), "
         "the Anthropic API (needs ANTHROPIC_API_KEY, billed per token), or the offline fake",
     )
 
@@ -137,11 +155,53 @@ def _refine(args):
     _print_checks(site.terrain_checks(), site.refine_plan_approval, site.current_revision.blockout)
 
 
+def _request(args):
+    site = Site.open(args.site)
+    answer = site.request_edit(args.words, AGENTS[args.agent]())
+    if isinstance(answer, NeedsReopen):
+        print(answer)
+        print(f"nothing changed; to change it, run `quarry reopen {args.site}` and ask again at Checkpoint 1")
+    elif site.checkpoint == 1:
+        print(f"drafted Revision {answer.number} for your Edit Request")
+        _print_checks(site.checks(), site.approval, answer.blockout)
+    else:
+        print(f"drafted Refine Plan Revision {answer.number} for your Edit Request")
+        _print_checks(site.terrain_checks(), site.refine_plan_approval, site.revision(site.approval.revision).blockout)
+
+
+def _reopen(args):
+    site = Site.open(args.site)
+    site.reopen(by=_caller())
+    _print_reopened(site)
+
+
+def _brief(args):
+    site = Site.open(args.site)
+    reopenings = len(site.reopenings)
+    site.edit_brief(Brief.load(args.brief), by=_caller())
+    print(f"changed the Brief of {args.site}")
+    if len(site.reopenings) > reopenings:
+        _print_reopened(site)
+
+
+def _print_reopened(site):
+    print(f"Reopened Blockout Revision {site.reopenings[-1].revision}")
+    superseded = [r.number for r in site.superseded_refine_plans]
+    if superseded:
+        print(f"{_refine_plans(superseded)} {'is' if len(superseded) == 1 else 'are'} Superseded: viewable, never exportable")
+
+
+def _refine_plans(numbers):
+    if len(numbers) == 1:
+        return f"Refine Plan Revision {numbers[0]}"
+    return f"Refine Plan Revisions {numbers[0]}–{numbers[-1]}"
+
+
 def _open(args):
     site = Site.open(args.site)
     if site.current_revision is None:
         raise Refused(f"nothing to review yet; run `quarry draft {args.site}` first")
-    server = serve(args.site, _caller(), port=args.port)
+    server = serve(args.site, _caller(), port=args.port, agent=AGENTS[args.agent](), superseded=args.refine_plan)
     print(f"Checkpoint page for {args.site}: {server.url}")
     print("acting as", server.caller.name, "· Ctrl-C to stop")
     if not args.no_browser:
@@ -167,6 +227,9 @@ def _status(args):
         print(f"Checkpoint 1 · no Draft yet (run `quarry draft {args.site}`)")
         return
     print(f"Checkpoint 1 · Blockout Revision {revision.number} · {_state(revision, site.approval, site.rejections)}")
+    superseded = [r.number for r in site.superseded_refine_plans]
+    if superseded:
+        print(f"{_refine_plans(superseded)} Superseded by a Reopen (see `quarry show {args.site} N --refine-plan`)")
     _print_checks(site.checks(), site.approval, site.current_revision.blockout)
     if site.checkpoint == 1:
         return
@@ -191,7 +254,7 @@ def _state(revision, approval, rejections):
 
 def _show(args):
     site = Site.open(args.site)
-    if site.checkpoint != 1:
+    if args.refine_plan or site.checkpoint != 1:
         _show_refine_plan(site, args.revision)
         return
     revision = site.revision(args.revision)
@@ -200,6 +263,8 @@ def _show(args):
             print(f"rejected by {rejection.by.name}: {rejection.note}")
     if revision.revived_from:
         print(f"revived from Revision {revision.revived_from}")
+    if revision.request:
+        print(f"drafted for the Edit Request “{revision.request}”")
     blockout = revision.blockout
     for landmark in blockout.landmarks:
         x, y = landmark.position
@@ -223,6 +288,10 @@ def _show(args):
 
 def _show_refine_plan(site, number):
     revision = site.refine_plan(number)
+    if revision.superseded:
+        print(f"Superseded: built on Blockout Revision {revision.blockout_revision}, since Reopened")
+    if revision.request:
+        print(f"drafted for the Edit Request “{revision.request}”")
     for rejection in site.refine_plan_rejections:
         if rejection.revision == revision.number:
             print(f"rejected by {rejection.by.name}: {rejection.note}")

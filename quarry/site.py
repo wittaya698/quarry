@@ -5,6 +5,10 @@ line. Nothing in it is ever rewritten or deleted.
 
 Two Drafts pass a Checkpoint each — the Blockout, then the Refine Plan — under
 the same rules, so both are kept by one `_Stage`.
+
+`brief.json` is the Brief the Site was created with; a later change is a history
+entry. A Reopen withdraws the Blockout's Approval and Supersedes every Refine
+Plan Revision so far; they keep their numbers, viewable but closed to every act.
 """
 import json
 from dataclasses import dataclass, replace
@@ -13,13 +17,14 @@ from pathlib import Path
 
 from quarry.blockout import Blockout
 from quarry.brief import Brief, brief_check
+from quarry.carry import carry_forward, touched
 from quarry.checks import run_checks
 from quarry.edits import apply_edit, apply_refine_edit
 from quarry.export import export_glb, verify_export
 from quarry.identity import Human
 from quarry.refine import RefinePlan
 from quarry.terrain import build_terrain
-from quarry.validation import validate_blockout, validate_refine_plan
+from quarry.validation import NeedsReopen, validate_blockout, validate_refine_answer, validate_refine_plan
 
 
 class Refused(Exception):
@@ -32,6 +37,7 @@ class Revision:
     blockout: Blockout
     revived_from: int | None = None
     edited_by: Human | None = None  # the human who made this Revision by editing
+    request: str | None = None  # the Edit Request the Agent answered with it
 
 
 @dataclass(frozen=True)
@@ -40,6 +46,9 @@ class RefinePlanRevision:
     plan: RefinePlan
     revived_from: int | None = None
     edited_by: Human | None = None
+    request: str | None = None
+    blockout_revision: int | None = None  # the approved Blockout it refines
+    superseded: bool = False  # its Blockout was Reopened: viewable, never exportable
 
 
 @dataclass(frozen=True)
@@ -58,6 +67,13 @@ class Rejection:
     note: str  # what was wrong; feeds the next Draft
 
 
+@dataclass(frozen=True)
+class Reopening:
+    revision: int  # the Blockout Revision whose Approval it withdrew
+    by: Human
+    at: datetime
+
+
 class _Stage:
     """One Draft's Revisions and the human acts on them."""
 
@@ -73,9 +89,23 @@ class _Stage:
             raise Refused(f"no Revision {number} of the {self.name}; it has {len(self.revisions)}")
         return self.revisions[number - 1]
 
+    def live(self, number):
+        """A Revision a human may still act on: any but a Superseded one."""
+        revision = self.revision(number)
+        if getattr(revision, "superseded", False):
+            raise Refused(f"{self.name} Revision {number} is Superseded: viewable, but closed to every act")
+        return revision
+
     @property
     def current(self):
-        return self.revisions[-1] if self.revisions else None
+        """The latest Revision, or None before the first or once it is Superseded."""
+        latest = self.revisions[-1] if self.revisions else None
+        return None if getattr(latest, "superseded", False) else latest
+
+    def supersede(self):
+        """Every Revision so far is Superseded, and its Approval with it."""
+        self.revisions = [replace(r, superseded=True) for r in self.revisions]
+        self.approval = None
 
     def is_rejected(self, number):
         return any(r.revision == number for r in self.rejections)
@@ -95,7 +125,7 @@ class _Stage:
             raise Refused(f"cannot approve Revision {number}: no Waiver for {', '.join(unwaived)}")
 
     def refuse_rejection(self, number, note):
-        self.revision(number)
+        self.live(number)
         if not note.strip():
             raise Refused("a Rejection needs a note saying what was wrong")
 
@@ -106,6 +136,8 @@ class _Stage:
             revision = self.revision_type(entry["number"], draft, entry["revived_from"])
             if entry.get("edited_by"):
                 revision = replace(revision, edited_by=Human(entry["edited_by"]))
+            if entry.get("request"):
+                revision = replace(revision, request=entry["request"])
             self.revisions.append(revision)
         elif kind == "approval":
             at = datetime.fromisoformat(entry["at"])
@@ -121,6 +153,7 @@ class Site:
         self.brief = brief
         self._blockout = _Stage("blockout", "Blockout", Revision, "blockout", Blockout)
         self._refine = _Stage("refine_plan", "Refine Plan", RefinePlanRevision, "plan", RefinePlan)
+        self.reopenings = []
 
     @classmethod
     def create(cls, path, brief):
@@ -149,6 +182,14 @@ class Site:
 
     # --- Checkpoint #1: the Blockout --------------------------------------
 
+    def edit_brief(self, brief, by):
+        """Change the Brief. After Approval this Reopens the Blockout first, so a
+        new target never sits under an old Approval."""
+        _require_human(by, "change the Brief")
+        if self.approval is not None:
+            self.reopen(by)
+        self._record(self._blockout, {"kind": "brief", "brief": brief.to_dict(), "by": by.name, "at": _now()})
+
     def brief_problems(self):
         """The Brief Check: what makes this Brief impossible. Empty means it can be drafted."""
         return brief_check(self.brief)
@@ -164,6 +205,32 @@ class Site:
     def edit(self, number, change, by):
         """A human edit of the current Blockout Revision: a new Revision, no Agent call."""
         self._edit(self._blockout, number, by, lambda r: apply_edit(r.blockout, change))
+
+    def request_edit(self, request, agent):
+        """An Edit Request: a plain-language change the Agent answers with a new
+        Revision of the current stage's Draft, which is returned — or, at
+        Checkpoint #2, with NeedsReopen when only the Blockout could make it."""
+        request = request.strip()
+        if not request:
+            raise Refused("an Edit Request needs words saying what to change")
+        if self.approval is None:
+            stage, missing = self._blockout, "draft a Blockout first"
+        else:
+            stage, missing = self._refine, "draft a Refine Plan first"
+        stage.refuse_revision()
+        if stage.current is None:
+            raise Refused(f"nothing to change yet; {missing}")
+        if stage is self._blockout:
+            output = agent.edit_blockout(self.brief, stage.current.blockout, request)
+            answer = validate_blockout(self.brief, output, current=stage.current.blockout)
+        else:
+            blockout = self.revision(self.approval.revision).blockout
+            output = agent.edit_refine_plan(self.brief, blockout, stage.current.plan, request)
+            answer = validate_refine_answer(self.brief, blockout, output, current=stage.current.plan)
+            if isinstance(answer, NeedsReopen):
+                return answer  # nothing recorded: the human decides whether to Reopen
+        self._append(stage, answer, request=request)
+        return stage.current
 
     def revive(self, number):
         self._append(self._blockout, self.revision(number).blockout, revived_from=number)
@@ -187,6 +254,16 @@ class Site:
     def checks(self):
         return run_checks(self.brief, self.current_revision.blockout)
 
+    def reopen(self, by):
+        """Withdraw the Blockout's Approval to change it: the Refine Plan and its
+        Terrain built on it become Superseded."""
+        _require_human(by, "reopen")
+        if self.approval is None:
+            raise Refused("only an approved Blockout can be Reopened")
+        self._record(
+            self._blockout, {"kind": "reopen", "revision": self.approval.revision, "by": by.name, "at": _now()}
+        )
+
     def approve(self, number, by, waivers=None):
         self._approve(self._blockout, number, by, waivers, self.checks)
 
@@ -202,7 +279,18 @@ class Site:
         note = _latest_note(self.refine_plan_rejections)
         shortcuts = _shortcut_misses(self.terrain_checks()) if self.current_refine_plan else ()
         output = agent.draft_refine_plan(self.brief, blockout, rejection_note=note, shortcuts=shortcuts)
-        self._append(self._refine, validate_refine_plan(self.brief, blockout, output))
+        self._append(self._refine, self._carried(blockout, validate_refine_plan(self.brief, blockout, output)))
+
+    def _carried(self, blockout, plan):
+        """The first Refine Plan after a Reopen keeps the Superseded one's values
+        for every surface the new Blockout left untouched; the rest are the Agent's."""
+        before = self._refine.revisions[-1] if self._refine.revisions else None
+        if before is None or not before.superseded:
+            return plan
+        old = self.revision(before.blockout_revision).blockout
+        keep = {s.surface for s in plan.surfaces} - touched(old, blockout)
+        carried = carry_forward(before.plan, before.number, keep)
+        return replace(plan, surfaces=tuple(carried.get(s.surface, s) for s in plan.surfaces))
 
     @property
     def current_refine_plan(self):
@@ -214,7 +302,7 @@ class Site:
         self._edit(self._refine, number, by, lambda r: apply_refine_edit(r.plan, change))
 
     def revive_refine_plan(self, number):
-        self._append(self._refine, self.refine_plan(number).plan, revived_from=number)
+        self._append(self._refine, self._refine.live(number).plan, revived_from=number)
 
     def refine_plan(self, number):
         return self._refine.revision(number)
@@ -237,6 +325,18 @@ class Site:
 
     def reject_refine_plan(self, number, by, note):
         self._reject(self._refine, number, by, note)
+
+    @property
+    def superseded_refine_plans(self):
+        """Every Refine Plan Revision a Reopen has Superseded, oldest first."""
+        return [r for r in self._refine.revisions if r.superseded]
+
+    def superseded_terrain(self, number):
+        """The Terrain a Superseded Refine Plan Revision built, to look at only."""
+        revision = self.refine_plan(number)
+        if not revision.superseded:
+            raise Refused(f"Refine Plan Revision {number} is not Superseded")
+        return build_terrain(self.brief, self.revision(revision.blockout_revision), revision)
 
     def terrain(self):
         """Terrain built from the approved Blockout and the current Refine Plan."""
@@ -267,7 +367,7 @@ class Site:
     def _edit(self, stage, number, by, apply):
         _require_human(by, "edit")
         stage.refuse_revision()
-        revision = stage.revision(number)
+        revision = stage.live(number)
         current = stage.current.number
         if number != current:
             raise Refused(f"cannot edit Revision {number}: Revision {current} is current")
@@ -276,7 +376,7 @@ class Site:
     def _approve(self, stage, number, by, waivers, checks):
         _require_human(by, "approve")
         waivers = dict(waivers or {})
-        stage.revision(number)  # before the Checks, which need a Revision to measure
+        stage.live(number)  # before the Checks, which need a Revision to measure
         stage.refuse_approval(number, checks(), waivers)
         self._record(
             stage,
@@ -293,7 +393,7 @@ class Site:
 
     # --- History ----------------------------------------------------------
 
-    def _append(self, stage, draft, revived_from=None, edited_by=None):
+    def _append(self, stage, draft, revived_from=None, edited_by=None, request=None):
         stage.refuse_revision()
         entry = {
             "kind": "revision",
@@ -303,6 +403,8 @@ class Site:
         }
         if edited_by is not None:
             entry["edited_by"] = edited_by.name
+        if request is not None:
+            entry["request"] = request
         self._record(stage, entry)
 
     def _record(self, stage, entry):
@@ -312,8 +414,20 @@ class Site:
         self._apply(entry)
 
     def _apply(self, entry):
+        if entry["kind"] == "brief":
+            self.brief = Brief.from_dict(entry["brief"])
+            return
+        if entry["kind"] == "reopen":
+            at = datetime.fromisoformat(entry["at"])
+            self.reopenings.append(Reopening(entry["revision"], Human(entry["by"]), at))
+            self._blockout.approval = None
+            self._refine.supersede()
+            return
         stage = self._refine if entry.get("stage") == "refine_plan" else self._blockout
         stage.apply(entry)
+        if stage is self._refine and entry["kind"] == "revision":
+            on = replace(stage.revisions[-1], blockout_revision=self.approval.revision)
+            stage.revisions[-1] = on
 
 
 def _latest_note(rejections):

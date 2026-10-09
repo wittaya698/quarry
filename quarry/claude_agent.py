@@ -185,6 +185,49 @@ Terrain from the two, and every Check runs again on that Terrain.
   belongs to it. Do not restate or change any of it.
 """
 
+EDIT_BLOCKOUT_SYSTEM = BLOCKOUT_SYSTEM + """
+You are answering an Edit Request: the human asked, in plain language, for a
+change to the current Blockout. Answer with the whole Blockout, changed only as
+far as the request needs and kept to every rule above. Give each choice you
+change a fresh Reason from you (author ai) that says how it answers the request.
+Hand back every choice you do not change exactly as given, Reason included,
+even a Reason the human wrote.
+"""
+
+EDIT_REFINE_PLAN_SYSTEM = REFINE_PLAN_SYSTEM + """
+You are answering an Edit Request: the human asked, in plain language, for a
+change while walking the Terrain. Answer with exactly one of:
+- plan: the whole Refine Plan, changed only as far as the request needs, with a
+  fresh Reason from you (author ai) on each Refinement you change and
+  needs_reopen null. Hand back every Refinement you do not change exactly as
+  given, Reason included, even a Reason the human wrote. Try a plan first: a
+  wider falloff or a smoother slope profile often answers "less steep".
+- needs_reopen: when only a Blockout-owned property can make the change, with
+  plan null. Name the property in a few words, e.g. "hill height" or "camp
+  position", and say in one sentence why the Refine Plan cannot make it. The
+  human then decides whether to Reopen the Blockout; never change it yourself.
+"""
+
+def _keeping_human_reasons(schema):
+    """The schema with every Reason open to a human author too, so an Edit
+    Request's answer can hand back the human's unchanged choices. Validation
+    still refuses a human Reason on anything the answer changed."""
+    if schema == _REASON:
+        return {**_REASON, "properties": {**_REASON["properties"], "author": {"type": "string", "enum": ["ai", "human"]}}}
+    if isinstance(schema, dict):
+        return {k: _keeping_human_reasons(v) for k, v in schema.items()}
+    if isinstance(schema, list):
+        return [_keeping_human_reasons(v) for v in schema]
+    return schema
+
+
+NEEDS_REOPEN_SCHEMA = _object(property={"type": "string"}, reason={"type": "string"})
+EDIT_BLOCKOUT_SCHEMA = _keeping_human_reasons(BLOCKOUT_SCHEMA)
+EDIT_REFINE_PLAN_SCHEMA = _object(
+    plan={"anyOf": [_keeping_human_reasons(REFINE_PLAN_SCHEMA), {"type": "null"}]},
+    needs_reopen={"anyOf": [NEEDS_REOPEN_SCHEMA, {"type": "null"}]},
+)
+
 
 class ClaudeDrafter:
     """What every Claude adapter shares: the prompts and the schemas. Each
@@ -208,6 +251,23 @@ class ClaudeDrafter:
         if rejection_note:
             prompt += f"\n\nThe human rejected the last Refine Plan, saying:\n{rejection_note}\nWrite a fresh one that answers this."
         return self._ask(REFINE_PLAN_SYSTEM, prompt, REFINE_PLAN_SCHEMA)
+
+    def edit_blockout(self, brief, blockout, request):
+        prompt = (
+            f"The Brief:\n{json.dumps(brief.to_dict(), indent=2)}\n\n"
+            f"The current Blockout:\n{json.dumps(blockout.to_dict(), indent=2)}\n\n"
+            f"The human's Edit Request:\n{request}"
+        )
+        return self._ask(EDIT_BLOCKOUT_SYSTEM, prompt, EDIT_BLOCKOUT_SCHEMA)
+
+    def edit_refine_plan(self, brief, blockout, plan, request):
+        prompt = (
+            f"The Brief:\n{json.dumps(brief.to_dict(), indent=2)}\n\n"
+            f"The approved Blockout:\n{json.dumps(blockout.to_dict(), indent=2)}\n\n"
+            f"The current Refine Plan:\n{json.dumps(plan.to_dict(), indent=2)}\n\n"
+            f"The human's Edit Request:\n{request}"
+        )
+        return self._ask(EDIT_REFINE_PLAN_SYSTEM, prompt, EDIT_REFINE_PLAN_SCHEMA)
 
     def _ask(self, system, prompt, schema):
         raise NotImplementedError

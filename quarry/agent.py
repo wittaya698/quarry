@@ -1,10 +1,16 @@
 """The Agent port, and a fake that drafts without an LLM.
 
-An Agent has two operations, each returning its Draft as plain data (the shape
+An Agent has four operations, each returning its Draft as plain data (the shape
 of `to_dict`), never as a trusted object:
 
     draft_blockout(brief, rejection_note=None, shortcuts=())
     draft_refine_plan(brief, blockout, rejection_note=None, shortcuts=())
+    edit_blockout(brief, blockout, request)  -> a Blockout
+    edit_refine_plan(brief, blockout, plan, request)
+        -> {"plan": a Refine Plan, "needs_reopen": None}
+        or {"plan": None, "needs_reopen": {"property": ..., "reason": ...}}
+
+The last two answer an Edit Request: a plain-language change the human asks for.
 
 `shortcuts` are the latest Revision's missed Shortcut Checks, each carrying the
 route that leaked, so the next Draft can see where to close it.
@@ -97,6 +103,33 @@ class FakeAgent:
             if path.cut
         )
         return RefinePlan((ground, *zones, *cut_paths)).to_dict()
+
+    def edit_blockout(self, brief, blockout, request):
+        """Halves the height of every Zone the request names."""
+        named = [z.name for z in blockout.zones if z.name in request]
+        why = Reason("ai", f"halved in height for your request “{request}”")
+        zones = tuple(replace(z, height=z.height / 2, reason=why) if z.name in named else z for z in blockout.zones)
+        return replace(blockout, zones=zones).to_dict()
+
+    def edit_refine_plan(self, brief, blockout, plan, request):
+        """Doubles the falloff of every surface the request names, unless it asks
+        for something only the Blockout owns."""
+        for word, owned in _BLOCKOUT_WORDS.items():
+            if word in request:
+                [zone] = [z.name for z in blockout.zones if z.name in request] or ["the ground"]
+                why = f"“{word}” changes the {owned}, which the approved Blockout owns"
+                return {"plan": None, "needs_reopen": {"property": f"{zone} {owned}", "reason": why}}
+        why = Reason("ai", f"falloff doubled to ease the slopes, for your request “{request}”")
+        surfaces = tuple(
+            replace(s, falloff_width=s.falloff_width * 2, reason=why) if s.surface in request else s
+            for s in plan.surfaces
+        )
+        return {"plan": replace(plan, surfaces=surfaces).to_dict(), "needs_reopen": None}
+
+
+# Words in an Edit Request the fake reads as asking for a Blockout-owned property.
+_BLOCKOUT_WORDS = {"lower": "height", "higher": "height", "move": "position", "bigger": "radius", "smaller": "radius"}
+
 
 def _readings(mood):
     readings = []

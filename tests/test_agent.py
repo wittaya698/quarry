@@ -352,3 +352,60 @@ def test_a_refine_plan_must_refine_each_cut_path_exactly_once(approved_with_a_cu
 
     surfaces = [s.surface for s in approved_with_a_cut.current_refine_plan.plan.surfaces]
     assert surfaces == ["ground", "hill", "spawn→lighthouse"]
+
+
+def test_an_edit_request_at_checkpoint_1_sends_the_current_blockout_and_the_request(island):
+    lower = blockout_output()
+    lower["zones"][0].update(height=3, reason=ai("halved, as you asked"))
+    llm = FakeLLM(blockout_output(), lower)
+    island.draft(ClaudeAgent(client=llm))
+
+    island.request_edit("make the hill lower", ClaudeAgent(client=llm))
+
+    assert island.current_revision.blockout.zones[0].height == 3
+    assert "make the hill lower" in llm.prompt() and "a gentle hill off the Path" in llm.prompt()
+    assert llm.requests[-1]["output_config"]["format"]["schema"]["properties"].keys() == blockout_output().keys()
+
+
+def test_an_edit_request_at_checkpoint_2_is_answered_with_a_plan_or_a_named_reopen(approved):
+    wider = refine_output()
+    wider["surfaces"][1].update(falloff_width=30, reason=ai("a wider falloff eases the hill"))
+    needs = {"plan": None, "needs_reopen": {"property": "hill height", "reason": "only a lower hill is less tall"}}
+    llm = FakeLLM(refine_output(), {"plan": wider, "needs_reopen": None}, needs)
+    agent = ClaudeAgent(client=llm)
+    approved.draft_refine_plan(agent)
+
+    eased = approved.request_edit("make the hill less steep", agent)
+    reopen = approved.request_edit("make the hill less tall", agent)
+
+    assert eased.plan.surfaces[1].falloff_width == 30
+    assert "make the hill less steep" in llm.prompt(1) and "rougher on the hill" in llm.prompt(1)
+    assert "a gentle hill off the Path" in llm.prompt(1)  # the approved Blockout, to name what it owns
+    assert str(reopen) == "needs Reopen: hill height — only a lower hill is less tall"
+    schema = llm.requests[-1]["output_config"]["format"]["schema"]
+    assert set(schema["properties"]) == {"plan", "needs_reopen"}
+
+
+def authors(schema):
+    """Every Reason author a schema allows, anywhere in it."""
+    if isinstance(schema, dict):
+        if set(schema.get("properties", {})) == {"author", "text"}:
+            return set(schema["properties"]["author"]["enum"])
+        return set().union(*(authors(v) for v in schema.values()))
+    if isinstance(schema, list):
+        return set().union(*(authors(v) for v in schema))
+    return set()
+
+
+def test_only_an_edit_requests_answer_may_hand_back_a_human_reason(approved):
+    llm = FakeLLM(blockout_output(), refine_output(), refine_output(), {"plan": refine_output(), "needs_reopen": None})
+    agent = ClaudeAgent(client=llm)
+    agent.draft_blockout(approved.brief)
+    agent.draft_refine_plan(approved.brief, approved.current_revision.blockout)
+    approved.draft_refine_plan(agent)
+    approved.request_edit("make the hill less steep", agent)
+
+    drafts, edit = [r["output_config"]["format"]["schema"] for r in llm.requests[:2]], llm.requests[-1]
+    assert all(authors(s) == {"ai"} for s in drafts)
+    assert authors(edit["output_config"]["format"]["schema"]) == {"ai", "human"}
+    assert "exactly as given" in " ".join(edit["system"].split())

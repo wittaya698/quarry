@@ -103,9 +103,13 @@ exported island.glb from Blockout Revision 1 and Refine Plan Revision 1; collisi
 | `quarry new SITE --from OTHER_SITE`              | Create a variant Site from a copy of another Site's Brief, with its own history |
 | `quarry draft SITE [--agent subscription\|api\|fake]` | Ask the Agent for a new Blockout Revision, answering the latest Rejection note if there is one |
 | `quarry refine SITE [--agent subscription\|api\|fake]` | Ask the Agent for a new Refine Plan Revision (needs an approved Blockout) |
-| `quarry open SITE [--port N] [--no-browser]`    | Serve the current Checkpoint's page on 127.0.0.1 and open it; Ctrl-C stops it |
+| `quarry open SITE [--port N] [--no-browser] [--agent …]` | Serve the current Checkpoint's page on 127.0.0.1 and open it; `--agent` answers its Edit Requests. Ctrl-C stops it |
+| `quarry open SITE --refine-plan N`               | Walk a Superseded Refine Plan Revision's Terrain, read-only    |
 | `quarry status SITE`                             | Both Checkpoints' state, Revisions and Check results, or Brief Check problems before the first Draft |
-| `quarry show SITE N`                             | Revision N of the Draft at the current Checkpoint (Landmarks and Pads, Paths, Zones in Stacking Order, Readings), each choice with its Reason |
+| `quarry show SITE N [--refine-plan]`             | Revision N of the Draft at the current Checkpoint (Landmarks and Pads, Paths, Zones in Stacking Order, Readings), each choice with its Reason; `--refine-plan` shows a Refine Plan Revision, Superseded ones included |
+| `quarry request SITE "WORDS" [--agent …]`         | An Edit Request: the Agent answers with a new Revision at the current Checkpoint, or at Checkpoint #2 with "needs Reopen" naming the Blockout property it would take |
+| `quarry reopen SITE`                             | Withdraw the Blockout's Approval to change it; its Refine Plans and Terrain become Superseded |
+| `quarry brief SITE --brief FILE`                 | Change the Brief; after Approval this Reopens the Blockout     |
 | `quarry approve SITE N [--waive "CHECK=WHY"]...` | Approve Revision N at the current Checkpoint; every missed Check needs a Waiver |
 | `quarry reject SITE N --note TEXT`               | Reject Revision N at the current Checkpoint, saying what was wrong |
 | `quarry revive SITE N`                           | Copy a rejected Revision forward as a new one                |
@@ -145,7 +149,7 @@ The Brief Check flags a Walk Target only when no route could meet it: one longer
 - **Every Draft is validated before it is kept.** Whatever the Agent returns is checked first, and a bad Draft is refused whole, with nothing recorded. The checks: the output is well formed; every choice has the AI's own Reason; every Waypoint has exactly one Landmark; every Walk Target has exactly one Path; it doesn't restate the Brief's targets; it sets nothing the other stage owns ([ADR-0003](docs/adr/0003-each-property-owned-by-exactly-one-stage.md)); it attempts no human act. The Claude Agent is offered no tools, so it can only answer with a Draft.
 - **Approval names one exact Revision.** Approving any Revision other than the current one is refused, and so is approving a rejected one.
 - **Misses are never silent.** Approval is refused while any missed Check lacks a Waiver.
-- **Human acts are human-only.** Only a human can approve, waive or reject. The Site refuses these acts from the Agent or from any automated caller, and no setting turns this off. When the CLI is run without a terminal (from a pipe, script or CI), it passes an automated identity, so the act is refused. See [ADR-0004](docs/adr/0004-checkpoint-acts-are-human-only-enforced-in-core.md).
+- **Human acts are human-only.** Only a human can approve, waive, reject, Reopen or change the Brief. The Site refuses these acts from the Agent or from any automated caller, and no setting turns this off. When the CLI is run without a terminal (from a pipe, script or CI), it passes an automated identity, so the act is refused. See [ADR-0004](docs/adr/0004-checkpoint-acts-are-human-only-enforced-in-core.md).
 - **Edits make Revisions.** A human edit (moving a Landmark, which brings its Paths' ends along; moving, resizing, re-heighting or recombining a Zone; restacking Zones; changing a Reading's limit) applies to the current Revision only and creates the next one, recording who made it. Whatever it touched gets a human Reason, and everything else keeps the AI's. Edits are human-only, and an approved Blockout can't be edited.
 - **The page acts as you, or as no one.** `quarry open` fixes its caller at launch: you, when run from a terminal, otherwise an automated caller, so every act the page sends is refused. The page listens only on 127.0.0.1, and every request must carry the random token in the URL it printed.
 - **Rejections need a note** and keep the Revision. A rejected Revision stays viewable and can be revived.
@@ -155,6 +159,9 @@ The Brief Check flags a Walk Target only when no route could meet it: one longer
 - **Pads are flattened.** The Terrain Builder holds every Pad level at its centre's height and eases it back into the ground beyond. The Pad Check then measures it on the Terrain.
 - **The Refine Plan shapes edges, and nothing else of the Blockout's.** Each Zone's edge eases in over its `falloff_width`, centred on the rim so the Zone keeps its size, following its `slope_profile` (`linear`, `smooth` or `steep`). Refine Plan edits can change only slope profile, falloff width, roughness, seed and vegetation density, and each edit makes a new Revision.
 - **Terrain is built by code, not the AI.** The same Blockout and Refine Plan always give byte-identical Terrain, whose only randomness is the Refine Plan's seed. Terrain names the Blockout Revision and Refine Plan Revision it came from. See [ADR-0001](docs/adr/0001-approved-blockout-is-the-contract.md).
+- **Going back supersedes, never patches.** A Reopen withdraws the Blockout's Approval. Every Refine Plan Revision built on it becomes Superseded: still viewable, and its Terrain still walkable read-only, but closed to every act and never exportable. Changing the Brief after Approval Reopens first. Terrain changes only through a new Blockout or Refine Plan Revision.
+- **Carry-forward keeps what didn't change.** The first Refine Plan after a Reopen keeps the Superseded plan's values for every surface the new Blockout left untouched, each with a Reason naming the Revision it came from. It still needs its own Approval. A Zone or Cut Path is touched if it was edited (including restacked), or if it overlaps the old or new shape of anything edited: a Zone, a Cut Path's strip or a Landmark's Pad.
+- **Edit Requests never apply silently.** At Checkpoint #1 the Agent answers with a new Blockout Revision. At Checkpoint #2 it answers with a new Refine Plan Revision, or with "needs Reopen" naming the Blockout property, and nothing changes until you Reopen. The answer is validated like any Draft. It may hand back an unchanged choice with that choice's Reason, even a human one, but never put a human Reason on something it changed.
 - **Export is verified, not trusted.** Export is refused until the Refine Plan is approved. The `.glb` names its collision mesh `terrain-colonly`, so Godot 4 builds a collision body on import. Each Export is re-imported, and its collision is re-measured against the Terrain before the file is kept. See [ADR-0002](docs/adr/0002-standalone-core-browser-checkpoints-glb-export.md).
 
 ## Development
@@ -209,7 +216,7 @@ The MVP is planned as sixteen vertical slices in [.scratch/quarry-mvp/issues/](.
 5. ✅ Checkpoint #2: Checks on Terrain, Waivers per Checkpoint, and a walkable preview
 6. ✅ Live Agent: a Claude-backed adapter with a validation layer
 7. ✅ Draft quality review (human)
-8. Going back: Reopen, carry-forward and Edit Requests
+8. ✅ Going back: Reopen, carry-forward and Edit Requests
 9. Complete Export and the corruption self-test
 10. Verify in Godot 4 (human)
 11. ✅ Subscription Agent: draft on the Claude subscription via Claude Code, the default (blocks 7)
