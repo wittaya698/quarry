@@ -4,7 +4,7 @@ A terrain-authoring tool for game developers. An AI agent drafts the terrain, an
 
 You write a **Brief**: a footprint, the places you care about, how long it should take to walk between them, and a mood. The AI drafts a coarse **Blockout** with a **Reason** for each choice. Quarry then measures that Blockout against your targets rather than taking the AI's word for it. Nothing moves on until you approve one exact **Revision**.
 
-> **Status: early.** The skeleton runs end to end from the CLI: Brief → Brief Check → Blockout (Zones, Pads, Readings) → all Blockout Checks → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. Both Checkpoints have a browser page: a top-down Blockout editor at #1, and a first-person walk over the Terrain at #2, where every Check runs again on the real ground. The Export carries the terrain mesh, its collision, an anchor per Landmark, a curve per Path and vegetation density, with an optional Godot scene that makes each Path a Path3D; `quarry selftest` proves every guard can fail. Drafts come from Claude on your subscription by default, through the Claude Code CLI; `--agent api` uses the Anthropic API instead, and `--agent fake` an offline fake. See [the roadmap](#roadmap).
+> **Status: MVP complete.** It runs end to end from the CLI: Brief → Brief Check → Blockout (Zones, Pads, Readings) → all Blockout Checks → Checkpoint #1 → Refine Plan → Checkpoint #2 → Terrain → `.glb` with Godot collision. Both Checkpoints have a browser page: a top-down Blockout editor at #1, and a first-person walk over the Terrain at #2, where every Check runs again on the real ground. The Export carries the terrain mesh, its collision, an anchor per Landmark, a curve per Path and vegetation density, with an optional Godot scene that makes each Path a Path3D; `quarry selftest` proves every guard can fail. Drafts come from Claude on your subscription by default, through the Claude Code CLI; `--agent api` uses the Anthropic API instead, and `--agent fake` an offline fake. See [the roadmap](#roadmap).
 
 ## Quick start
 
@@ -105,7 +105,7 @@ func vegetation_density(terrain: Node3D, x: float, z: float) -> float:
 | -------------------- | ---------------------------------------------------------- | ------- |
 | `footprint`          | Site extent in metres, `[x, y]`                            | —       |
 | `waypoints`          | Named places; the AI decides where each goes               | —       |
-| `walk_targets`       | A `time` in seconds or a `distance` in metres between two Waypoints, with a fractional `tolerance` | `[]` |
+| `walk_targets`       | A `time` in seconds or a `distance` in metres between two Waypoints, with a fractional `tolerance`; `"no_shortcut": true` forces the walk, so no faster walkable route may exist anywhere | `[]` |
 | `mood`               | Plain-language description of the place                    | `""`    |
 | `walk_speed`         | Player pace in m/s, used to turn a time into a distance    | `1.4`   |
 | `max_walkable_slope` | Steepest incline a player should walk, in degrees          | `30`    |
@@ -152,13 +152,16 @@ Checks measure a surface: the Blockout's coarse **Surface** at Checkpoint #1, th
 | Check            | Passes when                                                                   |
 | ---------------- | ----------------------------------------------------------------------------- |
 | `walk A→B`       | The distance along the ground (so a climb counts for more than its map length), or that distance ÷ Walk Speed, is within the target's tolerance |
-| `slope A→B`      | The Path's steepest stretch is no steeper than `max_walkable_slope`           |
+| `slope A→B`      | Neither the Path's steepest stretch, either way, nor the ground's own slope along it is steeper than `max_walkable_slope` |
+| `shortcut A→B`   | For a `no_shortcut` walk: the fastest route a player could walk anywhere on the ground is no faster than the target's lower bound. A Shortcut never climbs onto ground steeper than `max_walkable_slope`, but may drop down any slope. A miss shows its route on both Checkpoint pages |
 | `pad NAME`       | The Landmark's Pad is no steeper than 3° anywhere                             |
 | `reading PHRASE` | A measurable Reading's limit holds across the footprint (max slope or max height) |
 
 Unmeasurable Readings are listed without a pass or miss. Decorative Paths aren't measured. AI-chosen Landmarks are marked `[AI-chosen]` in `show`, and still stand on a checked Pad.
 
-The Brief Check flags a Walk Target only when no route could meet it: one longer than a 4 m-wide route winding back and forth across the whole footprint at the Max Walkable Slope. A hard but possible target passes, and if the Draft then misses it, the Path's Reason says so. The Brief is never rewritten to fit.
+To force a walk, the AI lays a **Cut Path**: a Path at least 8 m wide that grades its own strip of ground at an even rise between its Landmarks, so the hill around it can be too steep to climb. An ordinary Path never changes the ground. See [ADR-0005](docs/adr/0005-forced-routes-cut-paths-and-the-shortcut-check.md).
+
+The Brief Check flags a Walk Target only when no route could meet it: one longer than a 4 m-wide route winding back and forth across the whole footprint at the Max Walkable Slope. A hard but possible target passes, and if the Draft then misses it, the Path's Reason says so. It also refuses a `no_shortcut` walk that the Brief's other Walk Targets, chained end to end at their upper bounds, could beat. The Brief is never rewritten to fit.
 
 ## Rules the core enforces
 
@@ -172,7 +175,7 @@ The Brief Check flags a Walk Target only when no route could meet it: one longer
 - **Nothing is built on an unapproved Blockout.** A Refine Plan is refused until the Blockout is approved, and the Refine Plan passes its own Checkpoint under the same rules.
 - **One definition of height.** Zones combine in Stacking Order by their Combine Mode (`add`, `max` or `replace`). Each point takes its surface values, such as roughness and vegetation, from its topmost Zone alone, never from a blend. Checks and the Terrain Builder share this one definition.
 - **Each Checkpoint gets its own Waivers.** Approving the Refine Plan needs a Waiver for every Check that misses on the Terrain, even one that was waived at Checkpoint #1.
-- **Pads are flattened.** The Terrain Builder holds every Pad level at its centre's height and eases it back into the ground beyond. The Pad Check then measures it on the Terrain.
+- **Pads are flattened.** The Terrain Builder holds every Pad level at its centre's height and eases the correction back out into the ground beyond, so ground already level under a Pad is left unchanged and flattening never steepens the ground around it. The Pad Check then measures it on the Terrain.
 - **The Refine Plan shapes edges, and nothing else of the Blockout's.** Each Zone's edge eases in over its `falloff_width`, centred on the rim so the Zone keeps its size, following its `slope_profile` (`linear`, `smooth` or `steep`). Refine Plan edits can change only slope profile, falloff width, roughness, seed and vegetation density, and each edit makes a new Revision.
 - **Terrain is built by code, not the AI.** The same Blockout and Refine Plan always give byte-identical Terrain, whose only randomness is the Refine Plan's seed. Terrain names the Blockout Revision and Refine Plan Revision it came from. See [ADR-0001](docs/adr/0001-approved-blockout-is-the-contract.md).
 - **Going back supersedes, never patches.** A Reopen withdraws the Blockout's Approval. Every Refine Plan Revision built on it becomes Superseded: still viewable, and its Terrain still walkable read-only, but closed to every act and never exportable. Changing the Brief after Approval Reopens first. Terrain changes only through a new Blockout or Refine Plan Revision.
@@ -197,6 +200,7 @@ quarry/
   checkpoint1.html  The Checkpoint #1 page: top-down SVG editor, plain JavaScript
   checkpoint2.html  The Checkpoint #2 page: first-person Terrain walk (three.js) and Refine Plan editor
   checks.py     Checks: walk, slope, Pad and Reading Checks, measured on any surface
+  carry.py      Carry-forward: which Refine Plan values a Reopen leaves untouched
   surface.py    Surface: Ground + Zones (+ Refine Plan edges) → height and topmost Zone at any point
   agent.py      Agent port and the deterministic FakeAgent
   claude_agent.py  The Claude adapters' shared prompts, schemas and model; the API adapter
@@ -221,11 +225,12 @@ tests/
   - [0002](docs/adr/0002-standalone-core-browser-checkpoints-glb-export.md): a standalone core, browser Checkpoints, and `.glb` export with Godot 4 as the first target
   - [0003](docs/adr/0003-each-property-owned-by-exactly-one-stage.md): each property is owned by exactly one stage
   - [0004](docs/adr/0004-checkpoint-acts-are-human-only-enforced-in-core.md): Checkpoint acts are human-only, enforced in the core
+  - [0005](docs/adr/0005-forced-routes-cut-paths-and-the-shortcut-check.md): forced routes, with Cut Paths and the Shortcut Check
 - [.scratch/quarry-mvp/PRD.md](.scratch/quarry-mvp/PRD.md): the MVP product requirements
 
 ## Roadmap
 
-The MVP is planned as sixteen vertical slices in [.scratch/quarry-mvp/issues/](.scratch/quarry-mvp/issues/):
+The MVP was built as nineteen vertical slices, all done, in [.scratch/quarry-mvp/issues/](.scratch/quarry-mvp/issues/). Issues 17 to 19 came out of verifying in Godot:
 
 1. ✅ Tracer: Brief → Blockout → Checks → Approve/Reject via CLI
 2. ✅ Tracer: Refine Plan → Terrain → `.glb`
