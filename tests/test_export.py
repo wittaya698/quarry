@@ -161,12 +161,13 @@ def test_vegetation_is_density_data_on_the_terrain_node(refined, tmp_path):
     out = tmp_path / "meadow.glb"
 
     refined.export(out)
-    vegetation = read_glb(out).metadata["terrain"]["vegetation_density"]
+    # Godot keeps a node's glTF extras as one metadata entry, named extras
+    vegetation = read_glb(out).metadata["terrain"]["extras"]["vegetation_density"]
 
     terrain = refined.terrain()
     assert vegetation["spacing"] == terrain.spacing
     assert vegetation["rows"] == len(terrain.heights) and vegetation["columns"] == len(terrain.heights[0])
-    # row by row from the footprint's (0, 0) corner, x fastest: Godot reads it as node metadata
+    # row by row from the footprint's (0, 0) corner, x fastest
     assert vegetation["density"] == [d for row in terrain.vegetation for d in row]
 
 

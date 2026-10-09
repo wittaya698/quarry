@@ -1,6 +1,6 @@
 # 19 — Vegetation metadata sits under `extras` in Godot
 
-Status: ready-for-agent
+Status: done
 
 ## Parent
 
@@ -14,9 +14,15 @@ Correct the README, with a GDScript snippet that reads a density at (x, y). Deci
 
 ## Acceptance criteria
 
-- [ ] The README shows how Godot code reads the density, checked in Godot
-- [ ] The round-trip test reads the density the same way Godot does (from `extras`)
+- [x] The README shows how Godot code reads the density, checked in Godot
+- [x] The round-trip test reads the density the same way Godot does (from `extras`)
 
 ## Blocked by
 
 - None
+
+## Decided (2026-10-09)
+
+- **The numbers stay as they are.** Godot's glTF importer reads every JSON number as a float, whatever the file writes, so nothing Quarry writes can make `rows` an int. The README snippet casts with `int()`.
+- **Checked in Godot 4.7.2, headless:** the README's `vegetation_density()` was run on a fresh Export of the fake Agent's Site. At six points, including the footprint's far corner and one on the rise (0.6 against 0.3 around it), it returned what Quarry's Terrain holds.
+- `read_glb` now returns metadata as Godot imports it: a node's extras under one `extras` entry.

@@ -45,7 +45,7 @@ class Imported:
     meshes: dict  # node name → ImportedMesh
     anchors: dict  # Landmark name → its point
     curves: dict  # "start→end" → the Path's points, in order
-    metadata: dict  # node name → its glTF extras, which Godot imports as metadata
+    metadata: dict  # node name → its metadata as Godot imports it: the glTF extras, under "extras"
     children: dict  # node name → its children's names, in order; "" is the scene
 
 
@@ -246,7 +246,7 @@ def read_glb(path):
         if "mesh" not in node
     }
     curves = {node["name"]: curves[node["name"]] for node in children(PATHS) if node["name"] in curves}
-    metadata = {node["name"]: node["extras"] for node in nodes if "name" in node and "extras" in node}
+    metadata = {node["name"]: {"extras": node["extras"]} for node in nodes if "name" in node and "extras" in node}
     tree = {"": tuple(nodes[i].get("name", "") for i in document["scenes"][document.get("scene", 0)]["nodes"])}
     for node in nodes:
         if node.get("children"):
